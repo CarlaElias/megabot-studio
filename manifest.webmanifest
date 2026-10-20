@@ -1,0 +1,20 @@
+{
+  "id": "./",
+  "name": "MegaBot Studio — Publicidad que vende",
+  "short_name": "MegaBot Studio",
+  "description": "Crea anuncios originales de productos con fondos, colores y tipografías variadas, sin pagos ni alterar el producto.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0d1324",
+  "theme_color": "#0d1324",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
