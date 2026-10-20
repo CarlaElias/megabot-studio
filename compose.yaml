@@ -1,0 +1,53 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: mysql+pymysql://megabot:${MYSQL_PASSWORD}@db:3306/megabot
+      COOKIE_SECURE: "1"
+      ALLOWED_ORIGIN: https://${DOMAIN}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      IMAGE_MODEL: ${IMAGE_MODEL:-gpt-image-1.5}
+      TEXT_MODEL: ${TEXT_MODEL:-gpt-4.1-mini}
+      MAX_AI_IMAGES_PER_JOB: ${MAX_AI_IMAGES_PER_JOB:-50}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_CONTACT: ${VAPID_CONTACT:-mailto:admin@example.com}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: megabot
+      MYSQL_USER: megabot
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      retries: 15
+      start_period: 30s
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+volumes:
+  mysql_data:
+  caddy_data:
+  caddy_config:

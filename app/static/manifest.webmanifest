@@ -1,0 +1,22 @@
+{
+  "name": "MegaBot • Mega Compra",
+  "short_name": "MegaBot",
+  "description": "Inventario, ventas y anuncios de Mega Compra",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0b0d13",
+  "theme_color": "#101117",
+  "icons": [
+    {
+      "src": "/static/megabot-icon-192.webp",
+      "sizes": "192x192",
+      "type": "image/webp"
+    },
+    {
+      "src": "/static/megabot-icon.webp",
+      "sizes": "512x512",
+      "type": "image/webp"
+    }
+  ]
+}
