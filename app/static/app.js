@@ -3,7 +3,7 @@ const $ = s=>document.querySelector(s);
 const $$ = s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const bs=v=>'Bs '+Number(v||0).toFixed(2);
-const st={me:null,products:[],sales:[],deliveries:[],jobs:[],notices:[],audit:[],page:'dashboard',selectedJob:null,lastNotification:null,ws:null};
+const st={me:null,products:[],sales:[],deliveries:[],jobs:[],notices:[],audit:[],page:'dashboard',selectedJob:null,galleryImages:[],lastNotification:null,ws:null};
 function csrf(){return decodeURIComponent((document.cookie.match(/(?:^|; )megabot_csrf=([^;]+)/)||[])[1]||'')}
 async function api(path,opts={}){
  const method=opts.method||'GET';const headers=opts.headers||{};
@@ -52,7 +52,73 @@ function renderJobs(){$('#jobList').innerHTML=st.jobs.map(j=>jobRow(j)).join('')
 function renderOptions(){const productopts=st.products.filter(p=>p.active).map(p=>`<option value="${p.id}">${esc(p.name)} · ${bs(p.sale_price)}</option>`).join('');for(const selector of ['#jobProduct','#adProduct']){let s=$(selector);let old=s.value;if(s.dataset.cache!==productopts){s.innerHTML=productopts;s.dataset.cache=productopts;s.value=old||s.options[0]?.value||''}}}
 function renderNotifications(){$('#bellCount').textContent=st.notices.length||'';$('#notices').innerHTML=st.notices.map(n=>`<div class="list-item"><div><strong>${esc(n.message)}</strong><small>${esc(n.created_at.slice(0,16).replace('T',' '))}</small></div></div>`).join('')||'<p>Aún no tienes notificaciones.</p>'}
 function renderAudit(){$('#auditList').innerHTML=st.audit.map(a=>`<div class="list-item"><div><strong>${esc(a.admin)} · ${esc(a.action)}</strong><small>${esc(a.detail)} · ${esc(a.created_at.slice(0,16).replace('T',' '))}</small></div></div>`).join('')||'<p>Abre esta sección para consultar la actividad.</p>'}
-async function loadGallery(id,silent=false){st.selectedJob=id;let imgs=await api(`/jobs/${id}/images`);$('#galleryActions').innerHTML=`<a class="btn secondary" href="/api/jobs/${id}/download">⇩ Descargar todas (ZIP)</a> <a class="btn secondary" href="/api/jobs/${id}/download?only_approved=true">✓ Descargar aprobadas</a>`;$('#gallery').innerHTML=imgs.map(im=>`<div class="gallery-item"><img src="${im.url}" loading="lazy" alt="Anuncio generado"><label><input type="checkbox" data-approve="${im.id}" ${im.approved?'checked':''}> Aprobar</label></div>`).join('')||'<p>Aún no hay imágenes en este lote.</p>';if(!silent)$('#gallery').scrollIntoView({behavior:'smooth'})}
+async function loadGallery(id,silent=false){
+ st.selectedJob=id;
+ const imgs=await api(`/jobs/${id}/images`);st.galleryImages=imgs;
+ const job=st.jobs.find(x=>x.id===id);
+ const deletable=job&&['done','failed'].includes(job.status);
+ $('#galleryActions').innerHTML=`<div class="gallery-toolbar">
+ <button class="btn primary" data-save-all ${imgs.length?'':'disabled'}>⇩ Guardar todas · JPG separados (${imgs.length})</button>
+ <button class="btn secondary" data-save-approved ${imgs.some(x=>x.approved)?'':'disabled'}>✓ Guardar aprobadas</button>
+ <button class="btn secondary danger-action" data-delete-lot ${deletable?'':'disabled'}>🗑 Borrar lote del servidor</button></div>
+ <p class="dim gallery-help">Las imágenes se guardan individualmente, sin ZIP. Algunos navegadores solicitan permiso para descargar varios archivos. Revisa la galería o Descargas de tu teléfono antes de borrar el lote. Eliminar aquí no borra fotografías ya guardadas en tu celular ni las fotos originales del producto.</p>`;
+ $('#gallery').innerHTML=imgs.map((im,i)=>`<div class="gallery-item"><img src="${im.url}" loading="lazy" alt="Anuncio generado ${i+1}"><div class="gallery-item-actions"><a class="mini" href="/api/generated/${im.id}/download" download="MegaCompra_${id}_${i+1}.jpg">⇩ JPG</a><label><input type="checkbox" data-approve="${im.id}" ${im.approved?'checked':''}> Aprobar</label></div></div>`).join('')||'<p>Este lote ya no tiene imágenes guardadas.</p>';
+ if(!silent)$('#gallery').scrollIntoView({behavior:'smooth'});
+}
+function galleryFileName(jobId,imageId){return `MegaCompra_${jobId}_${imageId}.jpg`}
+async function downloadGalleryFiles(approvedOnly=false){
+ const imgs=st.galleryImages.filter(im=>!approvedOnly||im.approved);
+ if(!imgs.length)return toast('No hay imágenes seleccionadas para guardar.',true);
+ const btn=$('[data-save-all]');const btn2=$('[data-save-approved]');
+ if(btn)btn.disabled=true;if(btn2)btn2.disabled=true;
+ try{
+   if(typeof window.showDirectoryPicker==='function'){
+     const dir=await window.showDirectoryPicker({mode:'readwrite'});
+     for(let i=0;i<imgs.length;i++){
+       const im=imgs[i];const r=await fetch(`/api/generated/${im.id}/download`,{credentials:'same-origin'});
+       if(!r.ok)throw Error(`No se pudo obtener la imagen ${i+1}`);
+       const handle=await dir.getFileHandle(galleryFileName(st.selectedJob,im.id),{create:true});
+       const writable=await handle.createWritable();try{await writable.write(await r.blob())}finally{await writable.close()}
+     }
+     toast(`Guardadas ${imgs.length} imágenes JPG en la carpeta seleccionada.`);return;
+   }
+   if(navigator.share&&navigator.canShare&&typeof File!=='undefined'){
+     try{
+       const files=[];
+       for(const im of imgs){
+         const r=await fetch(`/api/generated/${im.id}/download`,{credentials:'same-origin'});
+         if(!r.ok)throw Error('No se pudieron cargar todas las imágenes.');
+         files.push(new File([await r.blob()],galleryFileName(st.selectedJob,im.id),{type:'image/jpeg'}));
+       }
+       if(navigator.canShare({files})){
+         await navigator.share({files,title:`MegaCompra - lote ${st.selectedJob}`});
+         toast('Se enviaron las imágenes a la opción elegida. Comprueba que se hayan guardado.');return;
+       }
+     }catch(err){if(err.name==='AbortError')return;console.info('Compartir archivos no disponible:',err)}
+   }
+   for(let i=0;i<imgs.length;i++){
+     const a=document.createElement('a');a.href=`/api/generated/${imgs[i].id}/download`;
+     a.download=galleryFileName(st.selectedJob,imgs[i].id);a.style.display='none';
+     document.body.appendChild(a);a.click();a.remove();
+     await new Promise(resolve=>setTimeout(resolve,350));
+   }
+   toast(`Se solicitaron ${imgs.length} descargas JPG. Si tu navegador las bloquea, autoriza descargas múltiples o usa los botones JPG individuales.`);
+ }catch(err){
+   if(err.name!=='AbortError')toast(err.message||'No se completó la descarga. Usa los botones JPG individuales.',true);
+ }finally{if(btn)btn.disabled=false;if(btn2)btn2.disabled=false}
+}
+async function removeGalleryJob(){
+ const id=st.selectedJob;
+ if(!id)return;
+ const answer=prompt('Esto borrará definitivamente del servidor TODOS los anuncios generados de este lote. No elimina los originales ni los archivos guardados en tu celular. Antes de continuar, comprueba tus descargas. Escribe BORRAR para confirmar:');
+ if(answer!=='BORRAR')return;
+ try{
+   const result=await api(`/jobs/${id}`,{method:'DELETE'});
+   st.selectedJob=null;st.galleryImages=[];
+   $('#galleryActions').innerHTML='';$('#gallery').innerHTML='<p>El lote se borró del servidor. Las fotos del producto se conservaron.</p>';
+   await refresh();toast(`Se eliminaron ${result.deleted} anuncios del servidor.`);
+ }catch(err){toast(err.message,true)}
+}
 async function loadAds(){let id=$('#adProduct').value;if(!id)return toast('Registra un producto primero',true);let d=await api(`/products/${id}/draft`);$('#fbTitle').value=d.facebook_title;$('#fbDescription').value=d.facebook_description;$('#tkCaption').value=d.tiktok_caption;toast('Borradores listos para copiar')}
 function realtime(){try{let ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws');st.ws=ws;ws.onopen=()=>{$('#conn').textContent='● En tiempo real'};ws.onmessage=()=>refresh();ws.onclose=()=>{$('#conn').textContent='● Reconectando';if(st.me)setTimeout(realtime,5000)}}catch(e){console.log(e)}}
 function on(sel,event,handler){$(sel).addEventListener(event,handler)}
@@ -83,6 +149,7 @@ on('#deliveryFilter','input',renderDeliveries);
 on('#deliveryList','change',async e=>{let s=e.target.closest('[data-delivery]');if(!s)return;try{await api(`/deliveries/${s.dataset.delivery}/status`,{method:'PATCH',body:JSON.stringify({status:s.value})});await refresh()}catch(ex){toast(ex.message,true)}});
 on('#jobForm','submit',async e=>{e.preventDefault();let mode=$('#jobMode').value,count=Number($('#jobCount').value);if(mode==='ia'&&!confirm(`Este proceso solicita ${count} imágenes a una API pagada. ¿Confirmas que aceptas los cargos según tu proveedor?`))return;try{let j=await api('/jobs',{method:'POST',body:JSON.stringify({product_id:Number($('#jobProduct').value),mode,count})});await refresh();toast(`Lote #${j.id} creado. Podrás ver el progreso en tiempo real.`)}catch(ex){toast(ex.message,true)}});
 on('#jobList','click',e=>{let b=e.target.closest('[data-gallery]');if(b)loadGallery(Number(b.dataset.gallery))});
+on('#galleryActions','click',e=>{let button=e.target.closest('button');if(!button)return;if(button.hasAttribute('data-save-all'))downloadGalleryFiles(false);else if(button.hasAttribute('data-save-approved'))downloadGalleryFiles(true);else if(button.hasAttribute('data-delete-lot'))removeGalleryJob()});
 on('#gallery','change',async e=>{let b=e.target.closest('[data-approve]');if(!b)return;try{await api(`/generated/${b.dataset.approve}`,{method:'PATCH',body:JSON.stringify({approved:b.checked})});toast('Aprobación registrada')}catch(ex){toast(ex.message,true)}});
 on('#loadAd','click',loadAds);
 on('#loadAiAd','click',async()=>{let id=$('#adProduct').value;if(!id)return toast('Selecciona un producto',true);if(!confirm('Esta opción utiliza una API de IA que puede generar cargos. ¿Deseas continuar?'))return;try{let d=await api(`/products/${id}/draft-ai`,{method:'POST'});$('#fbTitle').value=d.facebook_title;$('#fbDescription').value=d.facebook_description;$('#tkCaption').value=d.tiktok_caption;toast('Textos redactados con IA listos')}catch(ex){toast(ex.message,true)}});
