@@ -26,3 +26,14 @@ input,textarea,select{background:color-mix(in srgb,var(--bg) 75%,var(--surface))
 @media(max-width:950px){.theme-picker span{display:none}.topbar{padding:0 17px}.hero-logo{width:170px}.hero{padding:30px}}
 @media(max-width:720px){.topbar{padding:0 12px}.theme-picker select{max-width:118px;font-size:11px}.hero{border-radius:18px}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.metric strong{overflow-wrap:anywhere}.product-grid{grid-template-columns:repeat(auto-fit,minmax(185px,1fr))}.sidebar{padding-bottom:calc(12px + env(safe-area-inset-bottom))}.login-bg{padding:14px}.login-card{padding:23px}.setup-card{padding:20px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important}}
+
+/* Excel y galería de descargas JPG independientes */
+.page-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.excel-hint{margin-bottom:14px}
+.gallery-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.gallery-help{margin:12px 0 0;line-height:1.5}
+.gallery-item-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:7px;padding-top:9px}
+.gallery-item-actions .mini{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;white-space:nowrap}
+.gallery-item-actions label{gap:5px;white-space:nowrap}
+.danger-action{border-color:#b95166!important;color:#ffb4c0!important}
+@media(max-width:720px){.page-actions,.gallery-toolbar{width:100%}.page-actions .btn{flex:1}.gallery-toolbar .btn{width:100%}}
