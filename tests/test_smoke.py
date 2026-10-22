@@ -1,5 +1,6 @@
 """Pruebas de integración: cuentas, permisos, inventario, ventas y contenido."""
-import os, tempfile, io, time
+import os, tempfile, io, time, hashlib, zipfile
+from xml.etree import ElementTree as ET
 from pathlib import Path
 from PIL import Image
 
@@ -37,6 +38,17 @@ def test_integrated_flow():
         assert created.status_code==201, created.text
         product=created.json()
         assert product['id']>0
+        response=c.get('/api/products/excel')
+        assert response.status_code==200 and response.content[:2]==b'PK'
+        with zipfile.ZipFile(io.BytesIO(response.content)) as book:
+            xml=ET.fromstring(book.read('xl/worksheets/sheet1.xml'))
+            text=' '.join((e.text or '') for e in xml.iter())
+            assert 'MC-001' in text and 'Aceitero de vidrio' in text
+        updated=c.put(f'/api/products/{product["id"]}',json={**payload,'stock':7},headers=headers)
+        assert updated.status_code==200
+        updated_excel=c.get('/api/products/excel')
+        assert updated_excel.status_code==200 and updated_excel.content!=response.content
+        assert c.put(f'/api/products/{product["id"]}',json=payload,headers=headers).status_code==200
         im=Image.new('RGB',(400,400),'white');buf=io.BytesIO();im.save(buf,'PNG');buf.seek(0)
         upload=c.post(f'/api/products/{product["id"]}/photos',files={'photos':('foto.png',buf.getvalue(),'image/png')},headers=headers)
         assert upload.status_code==201, upload.text
@@ -80,6 +92,16 @@ def test_integrated_flow():
         assert entry['completed']==2
         assert len(c.get(f'/api/jobs/{job.json()["id"]}/images').json())==2
         assert c.get(f'/api/jobs/{job.json()["id"]}/download').status_code==200
+        image_ids=[x['id'] for x in c.get(f'/api/jobs/{job.json()["id"]}/images').json()]
+        photo_bytes=[c.get(f'/api/generated/{n}/download').content for n in image_ids]
+        assert all(x.startswith(b'\\xff\\xd8') for x in photo_bytes)
+        assert hashlib.sha256(photo_bytes[0]).digest()!=hashlib.sha256(photo_bytes[1]).digest()
+        assert c.delete(f'/api/jobs/{job.json()["id"]}').status_code==403
+        deleted=c.delete(f'/api/jobs/{job.json()["id"]}',headers=headers)
+        assert deleted.status_code==200 and deleted.json()['deleted']==2
+        assert c.get(f'/api/jobs/{job.json()["id"]}/images').status_code==404
+        assert c.get(f'/api/generated/{image_ids[0]}/download').status_code==404
+        assert c.get(photo['url']).status_code==200
         assert c.post(f'/api/sales/{s.json()["id"]}/cancel',headers=headers).status_code==200
         assert c.get('/api/products').json()[0]['stock']==4
         assert c.post('/api/logout',headers=headers).status_code==200
