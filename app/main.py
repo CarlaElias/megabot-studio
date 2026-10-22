@@ -16,6 +16,7 @@ from .models import (ROOT,DATA,SessionLocal,init_db,now,Admin,LoginSession,Produ
                      Sale,SaleLine,Delivery,Notification,GenerationJob,GeneratedImage,Audit,PushSubscription,PaymentRecord)
 from .security import (authenticated,check_csrf,resolve,hash_token,new_login,login_allowed,failed_login,verify_pass)
 from .worker import worker_loop,FILES
+from .excel_export import products_excel
 
 socket_clients=set()
 async def broadcast():
@@ -194,6 +195,16 @@ class ProductInput(BaseModel):
 def products(user=Depends(authenticated),db:Session=Depends(get_db)):
     rows=db.scalars(select(Product).options(selectinload(Product.photos)).order_by(Product.id.desc())).all()
     return [serial_product(p) for p in rows]
+
+@app.get('/api/products/excel')
+def export_products_excel(user=Depends(authenticated),db:Session=Depends(get_db)):
+    """Una exportación .xlsx actualizada en cada descarga; no guarda copias duplicadas."""
+    rows=db.scalars(select(Product).order_by(Product.id)).all()
+    content=products_excel(rows)
+    return StreamingResponse(content,
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers={'Content-Disposition':'attachment; filename="MegaBot_Inventario.xlsx"',
+                 'Cache-Control':'no-store'})
 
 @app.post('/api/products',status_code=201)
 async def new_product(data:ProductInput,user=Depends(check_csrf),db:Session=Depends(get_db)):
@@ -474,7 +485,38 @@ def job_images(job_id:int,user=Depends(authenticated),db:Session=Depends(get_db)
 def serve_generated(image_id:int,user=Depends(authenticated),db:Session=Depends(get_db)):
     image=db.get(GeneratedImage,image_id)
     if not image:raise HTTPException(404,'Imagen no encontrada')
-    return FileResponse(FILES/image.filename,media_type='image/jpeg')
+    path=FILES/image.filename
+    if not path.is_file():raise HTTPException(404,'El archivo ya no está disponible')
+    return FileResponse(path,media_type='image/jpeg')
+
+@app.get('/api/generated/{image_id}/download')
+def download_generated_jpg(image_id:int,user=Depends(authenticated),db:Session=Depends(get_db)):
+    image=db.get(GeneratedImage,image_id)
+    if not image:raise HTTPException(404,'Imagen no encontrada')
+    path=FILES/image.filename
+    if not path.is_file():raise HTTPException(404,'El archivo ya no está disponible')
+    return FileResponse(path,media_type='image/jpeg',
+                        filename=f'MegaCompra_{image.job_id}_{image.id}.jpg',
+                        content_disposition_type='attachment')
+
+@app.delete('/api/jobs/{job_id}')
+async def delete_generated_job(job_id:int,user=Depends(check_csrf),db:Session=Depends(get_db)):
+    """Borra SOLO anuncios generados, no fotografías originales de producto."""
+    job=db.get(GenerationJob,job_id)
+    if not job:raise HTTPException(404,'Lote no encontrado')
+    if job.status in ('queued','running'):
+        raise HTTPException(409,'Espera a que el lote termine antes de borrarlo')
+    images=db.scalars(select(GeneratedImage).where(GeneratedImage.job_id==job_id)).all()
+    paths=[FILES/image.filename for image in images]
+    for image in images:db.delete(image)
+    db.delete(job)
+    audit(db,user,'images.delete',f'lote {job_id}, {len(paths)} imágenes')
+    db.commit()
+    for path in paths:
+        try:path.unlink(missing_ok=True)
+        except OSError as exc:print('Error liberando imagen generada:',type(exc).__name__)
+    await broadcast()
+    return {'ok':True,'deleted':len(images)}
 
 class ApprovedInput(BaseModel):
     approved:bool
