@@ -144,3 +144,11 @@ Esta rama `integral-v3` es una versión candidata. La rama `integral-v2` sigue d
 - Dos afiches JPEG 1080×1350 generados **al descargarlos**, sin ocupar espacio persistente; conservan la fotografía original y muestran nombre, código, colores y precio mayorista. **Necesita una foto original**.
 - Para vender y descontar stock, la sección *Ventas* actual registra cantidades en unidades al precio retail; falta agregar flujo de venta por embalaje/cajón con precio negociado antes de utilizarlo para operaciones mayoristas.
 - **No desplegar esta rama sobre el Render Free operativo**: el SQLite y las fotografías permanecen en disco efímero. Se necesita primero migrar a almacenamiento persistente y respaldar datos.
+
+
+## MegaBot Integral v5 · Tienda y Mayoristas separados
+- `Tienda · por menor` gestiona productos que no pertenecen a Mayoristas; SKU `TDA-<ID>` único, automático y permanente, generado por servidor.
+- `Mayoristas · por mayor` mantiene SKU `MAY-<ID>` automático, según identificador persistido; incluye paquetes, cajones, fotos, costos privados y afiches de publicidad.
+- `Inventario general` consolida existencias de ambos canales, con edición contextual y enlace al XLSX.
+- Los productos antiguos conservan el SKU histórico; no se renumeran, para no perder trazabilidad.
+- `Render Free` sigue usando almacenamiento efímero. Subir la rama a GitHub **NO equivale** a desplegarla y actualizar Render puede provocar pérdida de sesión, cuentas y fotos. No desplegar sobre datos reales sin respaldos y persistencia.

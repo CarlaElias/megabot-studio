@@ -40,3 +40,13 @@ input,textarea,select{background:color-mix(in srgb,var(--bg) 75%,var(--surface))
 
 /* Mayoristas v4 */
 .wh-card{display:block;padding:16px}.wh-card-main{display:flex;gap:14px;align-items:flex-start}.wh-card-main>div:last-child{min-width:0;flex:1}.wh-img{width:104px;height:120px;object-fit:contain;border-radius:12px;border:1px solid var(--line);background:#fff;flex-shrink:0}.wh-placeholder{display:grid;place-items:center;background:var(--surface);font-size:12px;color:var(--muted)}.wh-profit{color:var(--accent)!important}.wh-actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}.wh-actions a{text-decoration:none}.wh-actions .mini{display:inline-flex;align-items:center}.wh-card small{display:block;margin-top:6px}@media(max-width:720px){.wh-img{width:78px;height:96px}.wh-actions .mini{flex:1 1 44%;justify-content:center}}
+
+/* Tienda y mayoristas v5: resumen unificado, adaptable a celular */
+.inventory-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:20px}
+.inventory-kpi{border:1px solid var(--line);border-radius:14px;padding:16px;background:var(--surface)}
+.inventory-kpi strong{display:block;font-size:28px;color:var(--accent)}
+.inventory-kpi small{display:block;margin-top:7px;color:var(--muted)}
+.inventory-line{display:flex;align-items:center;gap:15px;justify-content:space-between}
+.inventory-line>div{min-width:0;flex:1}.inventory-line button{flex-shrink:0}
+#productSku[readonly]{opacity:.85;border-style:dashed;cursor:not-allowed}
+@media(max-width:720px){.inventory-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.inventory-line{align-items:flex-start;flex-direction:column}.inventory-line button{width:100%}}

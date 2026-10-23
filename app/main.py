@@ -184,7 +184,8 @@ async def logout(request:Request,user=Depends(check_csrf),db:Session=Depends(get
     return response
 
 class ProductInput(BaseModel):
-    sku:str=Field(min_length=2,max_length=60)
+    # Ignorado al crear: TDA- se asigna en el servidor. Se acepta para compatibilidad con clientes antiguos.
+    sku:str|None=Field(default=None,max_length=60)
     name:str=Field(min_length=2,max_length=180)
     category:str=Field(default='Otros',max_length=80)
     description:str=Field(default='',max_length=2000)
@@ -209,20 +210,25 @@ def export_products_excel(user=Depends(authenticated),db:Session=Depends(get_db)
 
 @app.post('/api/products',status_code=201)
 async def new_product(data:ProductInput,user=Depends(check_csrf),db:Session=Depends(get_db)):
-    if db.scalar(select(Product).where(Product.sku==data.sku.strip())):
-        raise HTTPException(409,'El código SKU ya existe')
-    p=Product(sku=data.sku.strip(),name=data.name.strip(),category=data.category.strip(),description=data.description,
+    # El ID de la fila evita carreras entre administradores y mantiene los códigos estables.
+    p=Product(sku='PENDIENTE-'+secrets.token_hex(12),name=data.name.strip(),
+              category=data.category.strip(),description=data.description,
               sale_price=money(data.sale_price),purchase_cost=money(data.purchase_cost),stock=data.stock)
-    db.add(p);db.flush();audit(db,user,'product.create',str(p.id));db.commit()
+    db.add(p);db.flush()
+    code=f'TDA-{p.id:06d}'
+    # Protección adicional si hay códigos antiguos importados con este mismo valor.
+    if db.scalar(select(Product.id).where(Product.sku==code)):
+        code=f'TDA-{p.id:06d}-{secrets.token_hex(3).upper()}'
+    p.sku=code
+    audit(db,user,'product.create',p.sku);db.commit()
     await broadcast();return serial_product(p)
 
 @app.put('/api/products/{product_id}')
 async def edit_product(product_id:int,data:ProductInput,user=Depends(check_csrf),db:Session=Depends(get_db)):
     p=db.get(Product,product_id)
     if not p: raise HTTPException(404,'Producto no encontrado')
-    other=db.scalar(select(Product).where(Product.sku==data.sku.strip(),Product.id!=product_id))
-    if other: raise HTTPException(409,'El SKU ya está ocupado')
-    for key in ('sku','name','category','description','stock'):
+    # SKU permanente, incluso en las actualizaciones del producto.
+    for key in ('name','category','description','stock'):
         setattr(p,key,getattr(data,key).strip() if isinstance(getattr(data,key),str) else getattr(data,key))
     p.sale_price=money(data.sale_price);p.purchase_cost=money(data.purchase_cost)
     audit(db,user,'product.update',str(product_id));db.commit();await broadcast()
