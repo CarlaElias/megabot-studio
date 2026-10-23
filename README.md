@@ -152,3 +152,17 @@ Esta rama `integral-v3` es una versión candidata. La rama `integral-v2` sigue d
 - `Inventario general` consolida existencias de ambos canales, con edición contextual y enlace al XLSX.
 - Los productos antiguos conservan el SKU histórico; no se renumeran, para no perder trazabilidad.
 - `Render Free` sigue usando almacenamiento efímero. Subir la rama a GitHub **NO equivale** a desplegarla y actualizar Render puede provocar pérdida de sesión, cuentas y fotos. No desplegar sobre datos reales sin respaldos y persistencia.
+
+
+## MegaBot Integral v6 (preparación de datos persistentes)
+
+- **IMPORTANTE**: esta rama NO está en producción todavía. No editar las variables ni hacer redeploy del servicio actual `megabot-integral` mientras uses su SQLite efímero: perderías la cuenta activa y cualquier dato no respaldado.
+- `DATABASE_URL`: cadena privada del **Session pooler** de Supabase (IPv4, puerto 5432) con contraseña y nombre de BD `postgres`. Se conecta vía `psycopg` y `sslmode=require`, restringiendo las operaciones SQLAlchemy al esquema privado `megabot`. **Nunca publicar la cadena ni ponerla en GitHub/chat**.
+- `MEGABOT_STORAGE_BACKEND=supabase` usa Storage privado del proyecto. Las fotos originales viven en `megabot-privado/originales/`, los anuncios generados en `megabot-privado/anuncios/`; ninguna URL externa pública se expone y las descargas pasan por la sesión autenticada del backend. El botón de borrar lote elimina los objetos de la carpeta de anuncios, **no** las fotos originales.
+- `SUPABASE_URL=https://drqbfcprqnbtuloazqju.supabase.co`, `SUPABASE_STORAGE_BUCKET=megabot-privado`, `SUPABASE_SECRET_KEY` (llave secreta de servidor; **no usar publishable key**). Solo configurarla en variables privadas del nuevo servicio en Render, NUNCA en clientes web.
+- `MEGABOT_REQUIRE_PERSISTENCE=1` bloquea el inicio si faltan PostgreSQL o Supabase Storage, evitando volver silenciosamente al disco efímero.
+- Sigue siendo necesario `MEGABOT_SETUP_TOKEN` nuevo y fuerte para crear la primera administradora de la nueva BD (no reutilizar el antiguo código compartido en el chat), `COOKIE_SECURE=1` y `ALLOWED_ORIGIN=https://URL_DEL_NUEVO_SERVICIO.onrender.com`.
+- La nueva base de datos está en esquema `megabot` y no da `USAGE` a roles `anon` y `authenticated`. El asesor de Supabase advierte que el esquema tiene RLS deshabilitado; hay que revisar esa advertencia antes de dar acceso desde cualquier Data API. **No exponer `megabot` en Data API** ni conceder GRANT públicos.
+- Las fotos antiguas de la instancia v2 NO se migran automáticamente. Para mover el SQLite existente necesitarás un respaldo verificable o una exportación autenticada antes de sustituirlo; si no hay registros de negocio, se podrá crear la primera cuenta de nuevo en la base persistente.
+- Nunca implementar cambios directamente sobre Render v2. Probar v6 en una instancia separada antes de adoptar la nueva versión.
+- **Pruebas**: `python -m pytest -q tests/test_smoke.py tests/test_wholesale_poster.py tests/test_storage.py`.

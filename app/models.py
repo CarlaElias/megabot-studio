@@ -14,7 +14,16 @@ DATA.mkdir(exist_ok=True)
 DB_URL = os.getenv('DATABASE_URL', 'sqlite:///./data/megabot.db')
 if DB_URL.startswith('sqlite:///./'):
     DB_URL = 'sqlite:///' + str(ROOT / DB_URL.replace('sqlite:///./', '', 1))
-engine = create_engine(DB_URL, pool_pre_ping=True, connect_args={'check_same_thread': False, 'timeout': 30} if DB_URL.startswith('sqlite:') else {})
+# Render Free usa IPv4: en Supabase Free configura la URI del Session pooler, no la conexión directa IPv6.
+if DB_URL.startswith(('postgres://','postgresql://')):
+    DB_URL = DB_URL.replace('postgres://', 'postgresql+psycopg://', 1).replace('postgresql://', 'postgresql+psycopg://', 1)
+if DB_URL.startswith('postgresql+psycopg://'):
+    engine = create_engine(DB_URL, pool_pre_ping=True, pool_size=2, max_overflow=1,
+        connect_args={'options':'-csearch_path=megabot,public', 'sslmode':'require'})
+else:
+    engine = create_engine(DB_URL, pool_pre_ping=True,
+        connect_args={'check_same_thread': False, 'timeout': 30} if DB_URL.startswith('sqlite:') else {})
+
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 class Base(DeclarativeBase): pass

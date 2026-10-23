@@ -1,9 +1,11 @@
 import asyncio, os, uuid
+from tempfile import TemporaryDirectory
 from pathlib import Path
 from sqlalchemy import select
 from .models import SessionLocal, GenerationJob, GeneratedImage, Notification, Product, DATA
 from .imaging import compose_photo, ai_photo
 from .push import send_push
+from . import storage
 
 FILES=DATA/'private'
 FILES.mkdir(parents=True,exist_ok=True)
@@ -37,26 +39,34 @@ async def process_job(job_id,on_event):
         product=db.get(Product,job.product_id)
         if not product or not product.photos:
             job.status='failed'; job.error='Agrega primero fotografías reales al producto.'; db.commit();await on_event();return
-        references=[FILES/p.filename for p in product.photos]
+        reference_names=[p.filename for p in product.photos]
         mode,target,completed=job.mode,job.target,job.completed
         name,desc,price=product.name,product.description,float(product.sale_price)
     try:
         if mode=='ia' and not os.getenv('OPENAI_API_KEY'):
             raise RuntimeError('Configura OPENAI_API_KEY en .env para utilizar la generación de IA.')
-        for i in range(completed,target):
-            file_name=f'{uuid.uuid4().hex}.jpg'
-            out=FILES/file_name
-            original=references[i%len(references)]
-            if mode=='plantillas':
-                await asyncio.to_thread(compose_photo,original,out,name,price,i)
-            else:
-                await asyncio.to_thread(ai_photo,original,out,name,desc,price,i,os.getenv('IMAGE_MODEL','gpt-image-1.5'),os.getenv('OPENAI_API_KEY'))
-            with SessionLocal() as db:
-                job=db.get(GenerationJob,job_id)
-                job.items.append(GeneratedImage(filename=file_name))
-                job.completed=i+1
-                db.commit()
-            await on_event()
+        with TemporaryDirectory() as workdir:
+            # Originales se recuperan desde Supabase privado al procesar el lote.
+            references=[]
+            for idx,ref in enumerate(reference_names):
+                dest=Path(workdir)/f'original_{idx}.jpg'
+                dest.write_bytes(await asyncio.to_thread(storage.read,ref,'originales'))
+                references.append(dest)
+            for i in range(completed,target):
+                file_name=f'{uuid.uuid4().hex}.jpg'
+                out=Path(workdir)/file_name
+                original=references[i%len(references)]
+                if mode=='plantillas':
+                    await asyncio.to_thread(compose_photo,original,out,name,price,i)
+                else:
+                    await asyncio.to_thread(ai_photo,original,out,name,desc,price,i,os.getenv('IMAGE_MODEL','gpt-image-1.5'),os.getenv('OPENAI_API_KEY'))
+                await asyncio.to_thread(storage.save,file_name,out.read_bytes(),'anuncios')
+                with SessionLocal() as db:
+                    job=db.get(GenerationJob,job_id)
+                    job.items.append(GeneratedImage(filename=file_name))
+                    job.completed=i+1
+                    db.commit()
+                await on_event()
         with SessionLocal() as db:
             job=db.get(GenerationJob,job_id)
             job.status='done'

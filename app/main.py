@@ -6,7 +6,7 @@ from pathlib import Path
 from io import BytesIO
 from typing import Literal
 from fastapi import FastAPI, HTTPException, Depends, Request, UploadFile, File, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func
@@ -18,6 +18,7 @@ from .security import (authenticated,check_csrf,resolve,hash_token,new_login,log
 from .worker import worker_loop,FILES
 from .excel_export import products_excel
 from .wholesale_poster import create_wholesale_poster
+from . import storage
 
 socket_clients=set()
 async def broadcast():
@@ -27,7 +28,13 @@ async def broadcast():
 
 @asynccontextmanager
 async def lifespan(app):
+    if os.getenv('MEGABOT_REQUIRE_PERSISTENCE')=='1':
+        from .models import engine
+        if engine.dialect.name != 'postgresql' or not storage.is_remote():
+            raise RuntimeError('Producción exige PostgreSQL + Storage privado; se evita iniciar con SQLite o disco efímero')
     init_db()
+    if storage.is_remote():
+        await asyncio.to_thread(storage.verify)
     runner=asyncio.create_task(worker_loop(broadcast))
     yield
     runner.cancel()
@@ -264,28 +271,33 @@ async def add_photos(product_id:int,photos:list[UploadFile]=File(...),user=Depen
     created=[]
     try:
         for raw in validated:
-            name=uuid.uuid4().hex+'.jpg'; (FILES/name).write_bytes(raw);created.append(name)
+            name=uuid.uuid4().hex+'.jpg'; await asyncio.to_thread(storage.save,name,raw,'originales');created.append(name)
             p.photos.append(Photo(filename=name))
         audit(db,user,'photo.upload',f'producto {product_id}, fotos {len(created)}')
         db.commit();await broadcast();return {'ok':True,'count':len(created)}
     except Exception:
         db.rollback()
-        for n in created:(FILES/n).unlink(missing_ok=True)
+        for n in created:
+            try:await asyncio.to_thread(storage.delete,n,'originales')
+            except Exception:pass
         raise
 
 @app.get('/api/photos/{photo_id}')
 def serve_photo(photo_id:int,user=Depends(authenticated),db:Session=Depends(get_db)):
     p=db.get(Photo,photo_id)
     if not p:raise HTTPException(404,'Foto no encontrada')
-    return FileResponse(FILES/p.filename,media_type='image/jpeg')
+    try:return Response(storage.read(p.filename,'originales'),media_type='image/jpeg')
+    except (FileNotFoundError,RuntimeError):raise HTTPException(404,'Fotografía no disponible')
 
 @app.delete('/api/photos/{photo_id}')
 async def remove_photo(photo_id:int,user=Depends(check_csrf),db:Session=Depends(get_db)):
     p=db.get(Photo,photo_id)
     if not p:raise HTTPException(404,'Foto no encontrada')
-    file=FILES/p.filename
+    try:await asyncio.to_thread(storage.delete,p.filename,'originales')
+    except (FileNotFoundError,RuntimeError) as exc:
+        raise HTTPException(502,'No se pudo borrar la fotografía: reintenta') from exc
     db.delete(p); audit(db,user,'photo.remove',str(photo_id));db.commit()
-    file.unlink(missing_ok=True);await broadcast();return {'ok':True}
+    await broadcast();return {'ok':True}
 
 
 # Mayoristas: los mismos productos, fotos y unidades se comparten con Inventario.
@@ -396,9 +408,14 @@ def wholesale_poster(profile_id:int,style:Literal['premium','oferta']='premium',
     if not profile:raise HTTPException(404,'Producto mayorista no encontrado')
     p=db.scalar(select(Product).options(selectinload(Product.photos)).where(Product.id==profile.product_id))
     if not p or not p.photos:raise HTTPException(422,'Sube primero una fotografía real del producto')
-    photo_path=FILES / p.photos[0].filename
-    if not photo_path.is_file():raise HTTPException(404,'Fotografía no disponible en el servidor')
-    content=create_wholesale_poster(photo_path,p,profile,style)
+    from tempfile import TemporaryDirectory
+    try:
+        original=storage.read(p.photos[0].filename,'originales')
+    except (FileNotFoundError,RuntimeError):raise HTTPException(404,'Fotografía no disponible')
+    with TemporaryDirectory() as folder:
+        photo_path=Path(folder)/'original.jpg'
+        photo_path.write_bytes(original)
+        content=create_wholesale_poster(photo_path,p,profile,style)
     return StreamingResponse(BytesIO(content),media_type='image/jpeg',headers={
         'Content-Disposition':f'attachment; filename="MegaCompra_{p.sku}_{style}.jpg"',
         'Cache-Control':'no-store'})
@@ -608,19 +625,17 @@ def job_images(job_id:int,user=Depends(authenticated),db:Session=Depends(get_db)
 def serve_generated(image_id:int,user=Depends(authenticated),db:Session=Depends(get_db)):
     image=db.get(GeneratedImage,image_id)
     if not image:raise HTTPException(404,'Imagen no encontrada')
-    path=FILES/image.filename
-    if not path.is_file():raise HTTPException(404,'El archivo ya no está disponible')
-    return FileResponse(path,media_type='image/jpeg')
+    try:return Response(storage.read(image.filename,'anuncios'),media_type='image/jpeg')
+    except (FileNotFoundError,RuntimeError):raise HTTPException(404,'El archivo ya no está disponible')
 
 @app.get('/api/generated/{image_id}/download')
 def download_generated_jpg(image_id:int,user=Depends(authenticated),db:Session=Depends(get_db)):
     image=db.get(GeneratedImage,image_id)
     if not image:raise HTTPException(404,'Imagen no encontrada')
-    path=FILES/image.filename
-    if not path.is_file():raise HTTPException(404,'El archivo ya no está disponible')
-    return FileResponse(path,media_type='image/jpeg',
-                        filename=f'MegaCompra_{image.job_id}_{image.id}.jpg',
-                        content_disposition_type='attachment')
+    try:content=storage.read(image.filename,'anuncios')
+    except (FileNotFoundError,RuntimeError):raise HTTPException(404,'El archivo ya no está disponible')
+    return Response(content,media_type='image/jpeg',headers={
+        'Content-Disposition':f'attachment; filename="MegaCompra_{image.job_id}_{image.id}.jpg"'})
 
 @app.delete('/api/jobs/{job_id}')
 async def delete_generated_job(job_id:int,user=Depends(check_csrf),db:Session=Depends(get_db)):
@@ -630,14 +645,16 @@ async def delete_generated_job(job_id:int,user=Depends(check_csrf),db:Session=De
     if job.status in ('queued','running'):
         raise HTTPException(409,'Espera a que el lote termine antes de borrarlo')
     images=db.scalars(select(GeneratedImage).where(GeneratedImage.job_id==job_id)).all()
-    paths=[FILES/image.filename for image in images]
+    names=[image.filename for image in images]
+    # Eliminar primero los objetos remotos para no perder referencias si Storage falla.
+    try:
+        for name in names:await asyncio.to_thread(storage.delete,name,'anuncios')
+    except (FileNotFoundError,RuntimeError) as exc:
+        raise HTTPException(502,'No se pudieron borrar todas las imágenes; inténtalo otra vez') from exc
     for image in images:db.delete(image)
     db.delete(job)
-    audit(db,user,'images.delete',f'lote {job_id}, {len(paths)} imágenes')
+    audit(db,user,'images.delete',f'lote {job_id}, {len(names)} imágenes')
     db.commit()
-    for path in paths:
-        try:path.unlink(missing_ok=True)
-        except OSError as exc:print('Error liberando imagen generada:',type(exc).__name__)
     await broadcast()
     return {'ok':True,'deleted':len(images)}
 
@@ -658,7 +675,9 @@ def download(job_id:int,only_approved:bool=False,user=Depends(authenticated),db:
     with zipfile.ZipFile(buf,'w',zipfile.ZIP_DEFLATED) as archive:
         for idx,im in enumerate(imgs,1):
             if only_approved and not im.approved:continue
-            archive.write(FILES/im.filename,arcname=f'MegaCompra_{idx:02d}.jpg')
+            try:raw=storage.read(im.filename,'anuncios')
+            except (FileNotFoundError,RuntimeError):continue
+            archive.writestr(f'MegaCompra_{idx:02d}.jpg',raw)
     buf.seek(0)
     return StreamingResponse(buf,media_type='application/zip',headers={'Content-Disposition':f'attachment; filename="MegaBot_lote_{job_id}.zip"'})
 
