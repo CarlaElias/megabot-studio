@@ -18,10 +18,24 @@ function toast(text,bad=false){let t=$('#toast');t.textContent=text;t.style.bord
 function showLogin(){$('#setup').classList.add('hidden');$('#login').classList.remove('hidden');$('#shell').classList.add('hidden')}
 function showSetup(){$('#login').classList.add('hidden');$('#shell').classList.add('hidden');$('#setup').classList.remove('hidden')}
 function showApp(){$('#setup').classList.add('hidden');$('#login').classList.add('hidden');$('#shell').classList.remove('hidden');$('#adminName').textContent=st.me.display_name;$('#adminAvatar').textContent=st.me.display_name?.[0]?.toUpperCase()||'A';navigate('dashboard')}
+let refreshInFlight=null;
 async function refresh(){
  if(!st.me)return;
+ if(refreshInFlight)return refreshInFlight;
+ refreshInFlight=refreshOnce();
+ try{return await refreshInFlight}finally{refreshInFlight=null}
+}
+async function refreshOnce(){
+ if(!st.me)return;
  try{
-  const [products,wholesale,sales,deliveries,jobs,notices,dashboard]=await Promise.all([api('/products'),api('/wholesale'),api('/sales'),api('/deliveries'),api('/jobs'),api('/notifications'),api('/dashboard')]);
+  // Limitar la concurrencia: un backend gratuito con 2 conexiones no soporta 7 lecturas simultáneas.
+  const paths=['/products','/wholesale','/sales','/deliveries','/jobs','/notifications','/dashboard'];
+  const responses=[];
+  for(let i=0;i<paths.length;i+=2){
+   const group=await Promise.all(paths.slice(i,i+2).map(path=>api(path)));
+   responses.push(...group);
+  }
+  const [products,wholesale,sales,deliveries,jobs,notices,dashboard]=responses;
   let old=st.lastNotification;st.products=products;st.wholesale=wholesale;st.sales=sales;st.deliveries=deliveries;st.jobs=jobs;st.notices=notices;st.dashboard=dashboard;
   const newest=notices[0]?.id||0;
   if(old!==null&&newest>old&&notices[0]){
@@ -150,7 +164,24 @@ on('#wholesaleList','click',async e=>{let ed=e.target.closest('[data-wh-edit]'),
 on('#inventoryFullList','click',e=>{const b=e.target.closest('[data-inventory-edit]');if(!b)return;let id=Number(b.dataset.inventoryEdit),w=st.wholesale.find(w=>w.product_id===id);if(w){navigate('wholesale');editWholesale(w.id)}else{navigate('products');openEditor(id)}});
 on('#newProduct','click',()=>openEditor());on('#closeEditor','click',()=>$('#productEditor').classList.add('hidden'));
 on('#searchProducts','input',renderProducts);
-on('#productForm','submit',async e=>{e.preventDefault();try{let id=$('#productId').value;let created=await api(id?`/products/${id}`:'/products',{method:id?'PUT':'POST',body:JSON.stringify(productPayload())});await refresh();openEditor(created.id);toast('Producto '+created.sku+' guardado. Ahora puedes subir sus fotos.')}catch(ex){toast(ex.message,true)}});
+on('#productForm','submit',async e=>{
+ e.preventDefault();
+ const form=e.currentTarget, button=form.querySelector('button');
+ if(button?.disabled)return;
+ if(button)button.disabled=true;
+ try{
+  const id=$('#productId').value;
+  const created=await api(id?`/products/${id}`:'/products',{method:id?'PUT':'POST',body:JSON.stringify(productPayload())});
+  // Un guardado confirmado por el servidor no debe perderse visualmente si la actualización tarda.
+  st.products=st.products.filter(p=>p.id!==created.id);
+  st.products.unshift(created);
+  openEditor(created.id);
+  render();
+  toast('Producto '+created.sku+' guardado. Ahora puedes subir sus fotos.');
+  await refresh();
+ }catch(ex){toast(ex.message,true)}
+ finally{if(button)button.disabled=false}
+});
 on('#photoInput','change',()=>$('#photoNames').textContent=[...$('#photoInput').files].map(f=>f.name).join(' · '));
 on('#photoForm','submit',async e=>{e.preventDefault();let id=$('#productId').value;let files=$('#photoInput').files;if(!id||!files.length)return toast('Selecciona imágenes',true);let f=new FormData();for(let file of files)f.append('photos',file);try{await api(`/products/${id}/photos`,{method:'POST',body:f});$('#photoInput').value='';await refresh();openEditor(Number(id));toast('Fotografías guardadas')}catch(ex){toast(ex.message,true)}});
 on('#productCards','click',async e=>{let b=e.target.closest('button');if(!b)return;let {edit,ad,gen,archive}=b.dataset;try{if(edit)openEditor(Number(edit));if(ad){navigate('ads');$('#adProduct').value=ad;await loadAds()}if(gen){navigate('studio');$('#jobProduct').value=gen}if(archive&&confirm('¿Archivar el producto? Se conservará en el historial.')){await api(`/products/${archive}/archive`,{method:'POST'});await refresh()}}catch(ex){toast(ex.message,true)}});
@@ -203,4 +234,4 @@ on('#setupForm','submit',async e=>{e.preventDefault();$('#setupError').textConte
 async function refreshTeam(){try{const a=await api('/admins');$('#teamAdmins').innerHTML=a.map(x=>`<div class="list-item"><strong>${esc(x.display_name)}</strong><small>${esc(x.username)} · ${x.active?'Activo':'Inactivo'}</small></div>`).join('');$('#teamAdminForm').classList.toggle('hidden',a.length>=3)}catch(ex){console.warn(ex)}}
 on('#teamAdminForm','submit',async e=>{e.preventDefault();try{await api('/admins',{method:'POST',body:JSON.stringify({username:$('#teamUsername').value,display_name:$('#teamDisplay').value,password:$('#teamPassword').value})});$('#teamAdminForm').reset();await refreshTeam();toast('Administrador agregado')}catch(ex){toast(ex.message,true)}});
 (async()=>{try{st.me=await api('/me');showApp();await refresh();await refreshTeam();realtime()}catch{showLogin();try{const setup=await api('/setup/status');if(setup.needs_setup&&setup.setup_available)showSetup()}catch{}}})();
-setInterval(()=>{if(st.me)refresh()},12000);
+setInterval(()=>{if(st.me)refresh()},45000);
