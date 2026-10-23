@@ -3,7 +3,7 @@ const $ = s=>document.querySelector(s);
 const $$ = s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const bs=v=>'Bs '+Number(v||0).toFixed(2);
-const st={me:null,products:[],sales:[],deliveries:[],jobs:[],notices:[],audit:[],page:'dashboard',selectedJob:null,galleryImages:[],lastNotification:null,ws:null};
+const st={me:null,products:[],wholesale:[],sales:[],deliveries:[],jobs:[],notices:[],audit:[],page:'dashboard',selectedJob:null,galleryImages:[],lastNotification:null,ws:null};
 function csrf(){return decodeURIComponent((document.cookie.match(/(?:^|; )megabot_csrf=([^;]+)/)||[])[1]||'')}
 async function api(path,opts={}){
  const method=opts.method||'GET';const headers=opts.headers||{};
@@ -21,8 +21,8 @@ function showApp(){$('#setup').classList.add('hidden');$('#login').classList.add
 async function refresh(){
  if(!st.me)return;
  try{
-  const [products,sales,deliveries,jobs,notices,dashboard]=await Promise.all([api('/products'),api('/sales'),api('/deliveries'),api('/jobs'),api('/notifications'),api('/dashboard')]);
-  let old=st.lastNotification;st.products=products;st.sales=sales;st.deliveries=deliveries;st.jobs=jobs;st.notices=notices;st.dashboard=dashboard;
+  const [products,wholesale,sales,deliveries,jobs,notices,dashboard]=await Promise.all([api('/products'),api('/wholesale'),api('/sales'),api('/deliveries'),api('/jobs'),api('/notifications'),api('/dashboard')]);
+  let old=st.lastNotification;st.products=products;st.wholesale=wholesale;st.sales=sales;st.deliveries=deliveries;st.jobs=jobs;st.notices=notices;st.dashboard=dashboard;
   const newest=notices[0]?.id||0;
   if(old!==null&&newest>old&&notices[0]){
    toast(notices[0].message);
@@ -44,6 +44,11 @@ function renderProducts(){let q=($('#searchProducts').value||'').toLowerCase();l
 function productPayload(){return {sku:$('#productSku').value,name:$('#productName').value,category:$('#productCategory').value,description:$('#productDescription').value,sale_price:$('#productPrice').value,purchase_cost:$('#productCost').value,stock:Number($('#productStock').value)}}
 function openEditor(id){let p=st.products.find(v=>v.id===id);$('#productEditor').classList.remove('hidden');$('#editorTitle').textContent=p?'Editar producto y fotografías':'Registrar producto';$('#productId').value=p?.id||'';$('#productSku').value=p?.sku||'';$('#productName').value=p?.name||'';$('#productCategory').value=p?.category||'Hogar';$('#productDescription').value=p?.description||'';$('#productPrice').value=p?.sale_price??'';$('#productCost').value=p?.purchase_cost??'';$('#productStock').value=p?.stock??'0';$('#photoManager').classList.toggle('hidden',!p);renderPhotos(p);$('#productEditor').scrollIntoView({behavior:'smooth',block:'start'})}
 function renderPhotos(p){$('#existingPhotos').innerHTML=p?.photos?.map(x=>`<div class="thumb"><img src="${x.url}" alt="Fotografía del producto"><button data-photo-delete="${x.id}" title="Eliminar imagen">×</button></div>`).join('')||'<p class="dim">Sin fotografías. Puedes añadir hasta 20.</p>'}
+function whPayload(){return {name:$('#whName').value,category:$('#whCategory').value,description:$('#whDescription').value,stock:Number($('#whStock').value),units_per_pack:Number($('#whPackQty').value),units_per_carton:Number($('#whCartonQty').value),min_wholesale_qty:Number($('#whMinQty').value),colors:$('#whColors').value,supplier:$('#whSupplier').value,purchase_cost:$('#whCost').value,other_unit_cost:$('#whExtra').value,sale_price:$('#whRetail').value,wholesale_unit_price:$('#whPrice').value,pack_total_price:$('#whPackPrice').value,carton_total_price:$('#whCartonPrice').value}}
+function whCalc(){let q=Number($('#whPackQty').value)||0,c=Number($('#whCartonQty').value)||0;const cost=Number($('#whCost').value||0)+Number($('#whExtra').value||0),p=Number($('#whPrice').value||0),pack=Number($('#whPackPrice').value||0),cart=Number($('#whCartonPrice').value||0);$('#whPreview').textContent=`Costo real por unidad: ${bs(cost)} · Ganancia bruta mayorista: ${bs(p-cost)} / ud. · Por embalaje (${q} ud.): ${bs(pack-q*cost)} · Por cajón (${c} ud.): ${bs(cart-c*cost)}. Valores estimados antes de otros gastos de venta.`}
+function clearWholesale(){let f=$('#wholesaleForm');f.reset();$('#wholesaleId').value='';$('#wholesaleFormTitle').textContent='Registrar nuevo producto';$('#whCategory').value='Mayoristas';whCalc()}
+function editWholesale(id){let w=st.wholesale.find(w=>w.id===id);if(!w)return;const ids={whName:'name',whCategory:'category',whDescription:'description',whStock:'stock',whPackQty:'units_per_pack',whCartonQty:'units_per_carton',whMinQty:'min_wholesale_qty',whColors:'colors',whSupplier:'supplier',whCost:'purchase_cost',whExtra:'other_unit_cost',whRetail:'sale_price',whPrice:'wholesale_unit_price',whPackPrice:'pack_total_price',whCartonPrice:'carton_total_price'};for(let [id,key]of Object.entries(ids))$('#'+id).value=w[key]??'';$('#wholesaleId').value=w.id;$('#wholesaleFormTitle').textContent='Editar '+w.sku;$('#whPhotos').value='';whCalc();$('#wholesaleForm').scrollIntoView({behavior:'smooth'})}
+function renderWholesale(){const area=$('#wholesaleList');if(!area)return;area.innerHTML=st.wholesale.map(w=>`<div class="list-item wh-card"><div class="wh-card-main">${w.photo?`<img class="wh-img" src="/api/photos/${w.photo}" alt="Producto original">`:'<div class="wh-img wh-placeholder">Sin foto</div>'}<div><strong>${esc(w.name)}</strong><small>${esc(w.sku)} · ${w.stock} unidades disponibles</small><small>${esc(w.colors)||'Sin colores especificados'}</small><small>Embalaje ${w.units_per_pack} ud. · Cajón ${w.units_per_carton} ud.</small><small>Venta mayorista ${bs(w.wholesale_unit_price)} / ud. (desde ${w.min_wholesale_qty})</small><small class="wh-profit">Ganancia bruta por unidad: ${bs(w.wholesale_profit)} · por cajón: ${bs(w.carton_profit)}</small></div></div><div class="wh-actions"><button class="mini" data-wh-edit="${w.id}">Editar</button><a class="mini" href="/api/wholesale/${w.id}/poster?style=premium" download="${esc(w.sku)}_premium.jpg">⇩ Afiche premium</a><a class="mini" href="/api/wholesale/${w.id}/poster?style=oferta" download="${esc(w.sku)}_oferta.jpg">⇩ Afiche oferta</a><button class="mini" data-wh-photo="${w.product_id}">Añadir foto</button></div></div>`).join('')||'<p>Registra tu primer producto mayorista para crear anuncios y calcular ganancias.</p>'}
 function renderSales(){let options=st.products.filter(p=>p.active&&p.stock>0);const select=$('#saleProduct');let old=select.value;select.innerHTML=options.map(p=>`<option value="${p.id}">${esc(p.name)} · ${bs(p.sale_price)} · ${p.stock} ud.</option>`).join('');if(old)select.value=old;$('#salesList').innerHTML=st.sales.map(s=>`<div class="list-item"><div><strong>#${s.id} ${esc(s.client)}</strong><small>${esc(s.created_at.slice(0,16).replace('T',' '))} • ${esc(s.payment_method)} • ${esc(s.status)}</small><small>Ganancia est.: ${bs(s.profit)} • Por cobrar: ${bs(s.balance)}</small></div><div style="text-align:right"><strong>${bs(s.total)}</strong><div>${s.status==='Confirmada'?`${s.balance>0?`<button class="mini" data-payment-sale="${s.id}">+ Abono</button>`:''}<button class="mini danger" data-cancel-sale="${s.id}">Anular</button>`:''}</div></div></div>`).join('')||'<p>Todavía no registraste ventas.</p>';calculateSale()}
 function calculateSale(){let p=st.products.find(x=>x.id===Number($('#saleProduct').value));let q=Number($('#saleQty').value||0);let transport=Number($('#saleTransport').value||0),extra=Number($('#saleExtra').value||0),expenses=Number($('#saleExpenses').value||0);let total=(p?.sale_price||0)*q+extra;let profit=total-(p?.purchase_cost||0)*q-transport-expenses;$('#salePreview').textContent=`Total estimado: ${bs(total)} · Ganancia estimada: ${bs(profit)} · Stock disponible: ${p?.stock||0}`;return total}
 function renderDeliveries(){let filter=$('#deliveryFilter').value;let rows=st.deliveries.filter(d=>!filter||d.scheduled_at.slice(0,10)===filter);$('#deliveryList').innerHTML=rows.map(d=>`<div class="list-item"><div><strong>${esc(d.client)} · ${esc(d.scheduled_at.slice(0,16).replace('T',' '))}</strong><small>${esc(d.location)}</small><small>${esc(d.notes)}</small></div><select class="delivery-select" data-delivery="${d.id}">${['Pendiente','Confirmado','En camino','Entregado','Cancelado'].map(x=>`<option ${x===d.status?'selected':''}>${x}</option>`).join('')}</select></div>`).join('')||'<p>No hay entregas para esta fecha.</p>'}
@@ -72,6 +77,7 @@ async function downloadGalleryFiles(approvedOnly=false){
  const btn=$('[data-save-all]');const btn2=$('[data-save-approved]');
  if(btn)btn.disabled=true;if(btn2)btn2.disabled=true;
  try{
+   // En navegadores de escritorio compatibles, escribe los JPG en la carpeta elegida.
    if(typeof window.showDirectoryPicker==='function'){
      const dir=await window.showDirectoryPicker({mode:'readwrite'});
      for(let i=0;i<imgs.length;i++){
@@ -82,6 +88,8 @@ async function downloadGalleryFiles(approvedOnly=false){
      }
      toast(`Guardadas ${imgs.length} imágenes JPG en la carpeta seleccionada.`);return;
    }
+   // Alternativa móvil: la hoja Compartir puede guardar múltiples JPG como en un álbum.
+   // En algunos navegadores se pierde la activación del gesto al preparar los archivos.
    if(navigator.share&&navigator.canShare&&typeof File!=='undefined'){
      try{
        const files=[];
@@ -96,6 +104,7 @@ async function downloadGalleryFiles(approvedOnly=false){
        }
      }catch(err){if(err.name==='AbortError')return;console.info('Compartir archivos no disponible:',err)}
    }
+   // Alternativa universal: descargas individuales, no un ZIP. El navegador puede bloquear varias.
    for(let i=0;i<imgs.length;i++){
      const a=document.createElement('a');a.href=`/api/generated/${imgs[i].id}/download`;
      a.download=galleryFileName(st.selectedJob,imgs[i].id);a.style.display='none';
@@ -127,6 +136,10 @@ on('#logout','click',async()=>{try{await api('/logout',{method:'POST'})}catch{}s
 $$('.nav').forEach(b=>b.addEventListener('click',async()=>{navigate(b.dataset.page);if(b.dataset.page==='activity'){st.audit=await api('/audit');renderAudit()}}));
 $$('[data-go]').forEach(b=>b.addEventListener('click',()=>navigate(b.dataset.go)));
 on('#menuToggle','click',()=>$('.sidebar').classList.toggle('open'));
+on('#wholesaleNew','click',()=>{clearWholesale();$('#wholesaleForm').scrollIntoView({behavior:'smooth'})});
+for(const n of ['#whPackQty','#whCartonQty','#whPrice','#whPackPrice','#whCartonPrice','#whCost','#whExtra'])on(n,'input',whCalc);
+on('#wholesaleForm','submit',async e=>{e.preventDefault();let id=$('#wholesaleId').value,uploads=[...$('#whPhotos').files];try{let row=await api(id?`/wholesale/${id}`:'/wholesale',{method:id?'PUT':'POST',body:JSON.stringify(whPayload())});if(uploads.length){let data=new FormData();for(let f of uploads)data.append('photos',f);try{await api(`/products/${row.product_id}/photos`,{method:'POST',body:data})}catch(err){toast('Producto guardado, pero la foto falló: '+err.message,true)}}st.wholesale=await api('/wholesale');await refresh();clearWholesale();toast('Producto por mayor guardado con código '+row.sku)}catch(err){toast(err.message,true)}});
+on('#wholesaleList','click',async e=>{let ed=e.target.closest('[data-wh-edit]'),photo=e.target.closest('[data-wh-photo]');if(ed)editWholesale(Number(ed.dataset.whEdit));if(photo){navigate('products');openEditor(Number(photo.dataset.whPhoto))}});
 on('#newProduct','click',()=>openEditor());on('#closeEditor','click',()=>$('#productEditor').classList.add('hidden'));
 on('#searchProducts','input',renderProducts);
 on('#productForm','submit',async e=>{e.preventDefault();try{let id=$('#productId').value;let created=await api(id?`/products/${id}`:'/products',{method:id?'PUT':'POST',body:JSON.stringify(productPayload())});await refresh();openEditor(created.id);toast('Producto guardado. Ahora puedes subir sus fotos.')}catch(ex){toast(ex.message,true)}});

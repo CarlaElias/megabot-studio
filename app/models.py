@@ -146,3 +146,20 @@ class PaymentRecord(Base):
     amount: Mapped[Decimal] = mapped_column(Numeric(12,2))
     method: Mapped[str] = mapped_column(String(50))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class WholesaleProfile(Base):
+    """Presentaciones mayoristas de un producto compartido con el inventario general."""
+    __tablename__ = 'wholesale_profiles'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey('products.id'), unique=True, nullable=False)
+    units_per_pack: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    units_per_carton: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    min_wholesale_qty: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    wholesale_unit_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    pack_total_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    carton_total_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    other_unit_cost: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    colors: Mapped[str] = mapped_column(String(350), default='')
+    supplier: Mapped[str] = mapped_column(String(160), default='')
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)

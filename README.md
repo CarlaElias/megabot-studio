@@ -123,7 +123,6 @@ El backend completo necesita un **Render Web Service**, no un Static Site. Rama 
 
 **Advertencia crítica sobre datos reales:** el disco de Render Web Service gratuito es efímero. SQLite local, fotografías, anuncios y cuentas pueden perderse cuando el servicio se reinicia, se vuelve a desplegar o se reemplaza una instancia. Esto solo es adecuado para **pruebas sin ventas ni contraseñas de producción**; NO garantiza persistencia compartida ni respaldo de datos de negocio. Para utilizar los tres administradores en operaciones reales se necesita un almacén persistente de base de datos y almacenamiento de imágenes, por ejemplo integraciones con planes gratuitos y límites separados. No confundir un servidor gratuito de prueba con una plataforma de producción.
 
-
 ## Novedades en MegaBot Integral v3 — Excel y descargas de galería
 
 - **Inventario → Excel actualizado** (`GET /api/products/excel`): los productos se exportan a un libro `.xlsx` privado, generado al momento de la descarga, con SKU, nombre, categoría, descripción, precio de venta, costo, stock, estado, valor invertido y margen. El archivo no ocupa almacenamiento permanente adicional en el servidor. Los cambios posteriores requieren descargar una nueva copia. Para sincronizar un Excel personal guardado en el teléfono, OneDrive o Google Drive se necesita configurar una integración específica; **no está implementada**.
@@ -134,3 +133,14 @@ El backend completo necesita un **Render Web Service**, no un Static Site. Rama 
 ### Aviso de despliegue
 
 Esta rama `integral-v3` es una versión candidata. La rama `integral-v2` sigue desplegada en Render. **No desplegar v3 sobre datos reales alojados en Render Free sin migrarlos antes a base de datos y almacenamiento persistentes o realizar un respaldo completo**: los archivos SQLite y fotos locales del plan gratuito son efímeros y pueden desaparecer con un redeploy. La exportación a Excel no contiene fotos, usuarios, contraseñas ni historial de ventas y no sustituye un respaldo integral.
+
+
+## MegaBot Integral v4 (rama de pruebas): Mayoristas
+
+- Menú **Productos por mayor**: nombre, categoría, colores, proveedor, stock en **unidades**, unidades por embalaje y cajón, compra mínima, costo de compra y gastos por unidad, precios públicos para unidad/embalaje/cajón.
+- **Código automático** `MAY-000001`, asignado desde el identificador único de la base de datos.
+- Integra el inventario: cada mayorista es un `Product` ordinario para Excel, fotografías y ventas; la presentación mayorista está en `wholesale_profiles`. `Base.metadata.create_all()` crea la nueva tabla en una base existente sin modificar columnas anteriores.
+- Ganancia **bruta** por presentación: precio total menos costo unitario real por la cantidad. Costos y proveedor son privados y **no aparecen en anuncios**.
+- Dos afiches JPEG 1080×1350 generados **al descargarlos**, sin ocupar espacio persistente; conservan la fotografía original y muestran nombre, código, colores y precio mayorista. **Necesita una foto original**.
+- Para vender y descontar stock, la sección *Ventas* actual registra cantidades en unidades al precio retail; falta agregar flujo de venta por embalaje/cajón con precio negociado antes de utilizarlo para operaciones mayoristas.
+- **No desplegar esta rama sobre el Render Free operativo**: el SQLite y las fotografías permanecen en disco efímero. Se necesita primero migrar a almacenamiento persistente y respaldar datos.

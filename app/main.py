@@ -13,10 +13,11 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import Session, selectinload
 from PIL import Image, ImageOps, UnidentifiedImageError
 from .models import (ROOT,DATA,SessionLocal,init_db,now,Admin,LoginSession,Product,Photo,
-                     Sale,SaleLine,Delivery,Notification,GenerationJob,GeneratedImage,Audit,PushSubscription,PaymentRecord)
+                     Sale,SaleLine,Delivery,Notification,GenerationJob,GeneratedImage,Audit,PushSubscription,PaymentRecord,WholesaleProfile)
 from .security import (authenticated,check_csrf,resolve,hash_token,new_login,login_allowed,failed_login,verify_pass)
 from .worker import worker_loop,FILES
 from .excel_export import products_excel
+from .wholesale_poster import create_wholesale_poster
 
 socket_clients=set()
 async def broadcast():
@@ -279,6 +280,122 @@ async def remove_photo(photo_id:int,user=Depends(check_csrf),db:Session=Depends(
     file=FILES/p.filename
     db.delete(p); audit(db,user,'photo.remove',str(photo_id));db.commit()
     file.unlink(missing_ok=True);await broadcast();return {'ok':True}
+
+
+# Mayoristas: los mismos productos, fotos y unidades se comparten con Inventario.
+class WholesaleInput(BaseModel):
+    name: str = Field(min_length=2, max_length=180)
+    category: str = Field(default='Mayoristas', max_length=80)
+    description: str = Field(default='', max_length=2000)
+    stock: int = Field(ge=0, le=1_000_000)  # en unidades, NO en cajones
+    sale_price: Decimal = Field(ge=0, le=9999999999)
+    purchase_cost: Decimal = Field(ge=0, le=9999999999)
+    other_unit_cost: Decimal = Field(default=0, ge=0, le=9999999999)
+    units_per_pack: int = Field(ge=1, le=100000)
+    units_per_carton: int = Field(ge=1, le=100000)
+    min_wholesale_qty: int = Field(ge=1, le=100000)
+    wholesale_unit_price: Decimal = Field(ge=0, le=9999999999)
+    pack_total_price: Decimal = Field(ge=0, le=9999999999)
+    carton_total_price: Decimal = Field(ge=0, le=9999999999)
+    colors: str = Field(default='', max_length=350)
+    supplier: str = Field(default='', max_length=160)
+
+def _wholesale_prices(p, profile):
+    from decimal import ROUND_HALF_UP
+    unit_cost = p.purchase_cost + profile.other_unit_cost
+    def profit(amount, units):
+        return float((amount - unit_cost * units).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+    def margin(amount, units):
+        if not amount: return None
+        return float(((amount - unit_cost * units) / amount * 100).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+    return {
+      'unit_cost': float(unit_cost),
+      'retail_profit':profit(p.sale_price, 1), 'retail_margin_percent':margin(p.sale_price,1),
+      'wholesale_profit':profit(profile.wholesale_unit_price,1),
+      'wholesale_margin_percent':margin(profile.wholesale_unit_price,1),
+      'pack_profit':profit(profile.pack_total_price,profile.units_per_pack),
+      'pack_margin_percent':margin(profile.pack_total_price,profile.units_per_pack),
+      'carton_profit':profit(profile.carton_total_price,profile.units_per_carton),
+      'carton_margin_percent':margin(profile.carton_total_price,profile.units_per_carton),
+    }
+
+def serial_wholesale(p,profile):
+    return {
+       'id':profile.id, 'product_id':p.id, 'sku':p.sku, 'name':p.name,
+       'category':p.category, 'description':p.description,
+       'stock':p.stock, 'active':p.active, 'photo':p.photos[0].id if p.photos else None,
+       'sale_price':float(p.sale_price), 'purchase_cost':float(p.purchase_cost),
+       'other_unit_cost':float(profile.other_unit_cost),
+       'units_per_pack':profile.units_per_pack,'units_per_carton':profile.units_per_carton,
+       'min_wholesale_qty':profile.min_wholesale_qty,
+       'wholesale_unit_price':float(profile.wholesale_unit_price),
+       'pack_total_price':float(profile.pack_total_price),
+       'carton_total_price':float(profile.carton_total_price),
+       'colors':profile.colors, 'supplier':profile.supplier,
+       **_wholesale_prices(p,profile)
+    }
+
+def apply_wholesale_fields(p,profile,data):
+    p.name=data.name.strip();p.category=data.category.strip() or 'Mayoristas'
+    p.description=data.description.strip();p.stock=data.stock
+    p.sale_price=money(data.sale_price);p.purchase_cost=money(data.purchase_cost)
+    for k in ('units_per_pack','units_per_carton','min_wholesale_qty'):
+        setattr(profile,k,getattr(data,k))
+    for k in ('wholesale_unit_price','pack_total_price','carton_total_price','other_unit_cost'):
+        setattr(profile,k,money(getattr(data,k)))
+    profile.colors=', '.join(dict.fromkeys(c.strip() for c in data.colors.split(',') if c.strip()))[:350]
+    profile.supplier=data.supplier.strip()
+
+@app.get('/api/wholesale')
+def list_wholesale(user=Depends(authenticated),db:Session=Depends(get_db)):
+    rows=db.execute(select(WholesaleProfile,Product).join(Product, WholesaleProfile.product_id==Product.id)
+          .options(selectinload(Product.photos)).order_by(WholesaleProfile.id.desc())).all()
+    return [serial_wholesale(p,profile) for profile,p in rows]
+
+@app.post('/api/wholesale',status_code=201)
+async def create_wholesale(data:WholesaleInput,user=Depends(check_csrf),db:Session=Depends(get_db)):
+    # Crear primero el producto asigna un ID atómico; código único, sin contador inseguro.
+    p=Product(sku='PENDIENTE-'+secrets.token_hex(12),name=data.name.strip(),
+              category=data.category.strip() or 'Mayoristas',description=data.description.strip(),
+              sale_price=money(data.sale_price),purchase_cost=money(data.purchase_cost),stock=data.stock)
+    profile=WholesaleProfile(product_id=0)
+    db.add(p);db.flush()
+    code=f'MAY-{p.id:06d}'
+    if db.scalar(select(Product.id).where(Product.sku==code)):
+        code=f'MAY-{p.id:06d}-{secrets.token_hex(3).upper()}'
+    p.sku=code
+    profile.product_id=p.id
+    apply_wholesale_fields(p,profile,data)
+    db.add(profile);db.flush()
+    audit(db,user,'wholesale.create',p.sku);db.commit()
+    await broadcast()
+    db.refresh(p)
+    return serial_wholesale(p,profile)
+
+@app.put('/api/wholesale/{profile_id}')
+async def update_wholesale(profile_id:int,data:WholesaleInput,user=Depends(check_csrf),db:Session=Depends(get_db)):
+    profile=db.get(WholesaleProfile,profile_id)
+    if not profile:raise HTTPException(404,'Producto mayorista no encontrado')
+    p=db.scalar(select(Product).options(selectinload(Product.photos)).where(Product.id==profile.product_id))
+    if not p:raise HTTPException(404,'Producto no encontrado')
+    apply_wholesale_fields(p,profile,data)
+    audit(db,user,'wholesale.update',p.sku);db.commit()
+    await broadcast()
+    return serial_wholesale(p,profile)
+
+@app.get('/api/wholesale/{profile_id}/poster')
+def wholesale_poster(profile_id:int,style:Literal['premium','oferta']='premium',
+                     user=Depends(authenticated),db:Session=Depends(get_db)):
+    profile=db.get(WholesaleProfile,profile_id)
+    if not profile:raise HTTPException(404,'Producto mayorista no encontrado')
+    p=db.scalar(select(Product).options(selectinload(Product.photos)).where(Product.id==profile.product_id))
+    if not p or not p.photos:raise HTTPException(422,'Sube primero una fotografía real del producto')
+    photo_path=FILES / p.photos[0].filename
+    if not photo_path.is_file():raise HTTPException(404,'Fotografía no disponible en el servidor')
+    content=create_wholesale_poster(photo_path,p,profile,style)
+    return StreamingResponse(BytesIO(content),media_type='image/jpeg',headers={
+        'Content-Disposition':f'attachment; filename="MegaCompra_{p.sku}_{style}.jpg"',
+        'Cache-Control':'no-store'})
 
 @app.get('/api/products/{product_id}/draft')
 def draft(product_id:int,user=Depends(authenticated),db:Session=Depends(get_db)):
