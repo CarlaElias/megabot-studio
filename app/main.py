@@ -13,7 +13,7 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import Session, selectinload
 from PIL import Image, ImageOps, UnidentifiedImageError
 from .models import (ROOT,DATA,SessionLocal,init_db,now,Admin,LoginSession,Product,Photo,
-                     Sale,SaleLine,Delivery,Notification,GenerationJob,GeneratedImage,Audit,PushSubscription,PaymentRecord,WholesaleProfile)
+                     Sale,SaleLine,Delivery,Notification,GenerationJob,GeneratedImage,Audit,PushSubscription,PaymentRecord,WholesaleProfile,BranchStock,BranchTransfer)
 from .security import (authenticated,check_csrf,resolve,hash_token,new_login,login_allowed,failed_login,verify_pass)
 from .worker import worker_loop,FILES
 from .excel_export import products_excel
@@ -78,7 +78,7 @@ def serial_sale(s):
     expenses=float(s.transport_cost+s.other_expenses)
     return {'id':s.id,'client':s.client,'phone':s.phone,'payment_method':s.payment_method,'paid_amount':float(s.paid_amount),
             'transport_cost':float(s.transport_cost),'other_expenses':float(s.other_expenses),'extra_income':float(s.extra_income),
-            'status':s.status,'created_at':s.created_at.isoformat(),'items':items,'subtotal':subtotal,'total':total,
+            'status':s.status,'location':s.location,'created_at':s.created_at.isoformat(),'items':items,'subtotal':subtotal,'total':total,
             'balance':round(max(total-float(s.paid_amount),0),2),'profit':round(total-cost-expenses,2)}
 
 def audit(db,user,action,detail=''):
@@ -190,6 +190,48 @@ async def logout(request:Request,user=Depends(check_csrf),db:Session=Depends(get
     response=JSONResponse({'ok':True}); response.delete_cookie('megabot_session',path='/'); response.delete_cookie('megabot_csrf',path='/')
     return response
 
+class TransferIn(BaseModel):
+    product_id: int = Field(gt=0)
+    quantity: int = Field(ge=1, le=1000000)
+    source_location: Literal['tienda','lapaz'] = 'tienda'
+
+@app.get('/api/branches/lapaz')
+def lapaz_stock(user=Depends(authenticated),db:Session=Depends(get_db)):
+    stocks={str(v.product_id):v.stock for v in db.scalars(select(BranchStock)).all()}
+    moves=db.scalars(select(BranchTransfer).order_by(BranchTransfer.id.desc()).limit(30)).all()
+    names={p.id:(p.sku,p.name) for p in db.scalars(select(Product).where(Product.id.in_([t.product_id for t in moves]))).all()} if moves else {}
+    return {'stocks':stocks,'transfers':[{'id':t.id,'sku':names.get(t.product_id,('',''))[0],
+            'name':names.get(t.product_id,('',''))[1],'quantity':t.quantity,
+            'source':t.source_location,'target':t.target_location,'created_at':t.created_at.isoformat()}
+            for t in moves]}
+
+@app.post('/api/branches/lapaz/transfer',status_code=201)
+async def transfer_stock(data:TransferIn,user=Depends(check_csrf),db:Session=Depends(get_db)):
+    # El candado sobre el producto serializa traslados y ventas de ambos locales.
+    p=db.scalar(select(Product).where(Product.id==data.product_id).with_for_update())
+    if not p or not p.active:raise HTTPException(404,'Producto no disponible')
+    branch=db.scalar(select(BranchStock).where(BranchStock.product_id==p.id).with_for_update())
+    if not branch:
+        branch=BranchStock(product_id=p.id,stock=0)
+        db.add(branch)
+        db.flush()
+    if data.source_location=='tienda':
+        if p.stock<data.quantity:raise HTTPException(409,f'Stock insuficiente en Tienda: {p.stock} unidades')
+        p.stock-=data.quantity
+        branch.stock+=data.quantity
+        dest='lapaz'
+    else:
+        if branch.stock<data.quantity:raise HTTPException(409,f'Stock insuficiente en La Paz: {branch.stock} unidades')
+        branch.stock-=data.quantity
+        p.stock+=data.quantity
+        dest='tienda'
+    db.add(BranchTransfer(product_id=p.id,admin_id=user['id'],source_location=data.source_location,
+                          target_location=dest,quantity=data.quantity))
+    audit(db,user,'stock.transfer',f'{p.sku}: {data.quantity} ud. {data.source_location} -> {dest}')
+    db.commit()
+    await broadcast()
+    return {'ok':True,'sku':p.sku,'tienda_stock':p.stock,'lapaz_stock':branch.stock}
+
 class ProductInput(BaseModel):
     # Ignorado al crear: TDA- se asigna en el servidor. Se acepta para compatibilidad con clientes antiguos.
     sku:str|None=Field(default=None,max_length=60)
@@ -202,14 +244,15 @@ class ProductInput(BaseModel):
 
 @app.get('/api/products')
 def products(user=Depends(authenticated),db:Session=Depends(get_db)):
-    rows=db.scalars(select(Product).options(selectinload(Product.photos)).order_by(Product.id.desc())).all()
+    rows=db.scalars(select(Product).options(selectinload(Product.photos)).order_by(Product.id.asc())).all()
     return [serial_product(p) for p in rows]
 
 @app.get('/api/products/excel')
 def export_products_excel(user=Depends(authenticated),db:Session=Depends(get_db)):
     """Una exportación .xlsx actualizada en cada descarga; no guarda copias duplicadas."""
     rows=db.scalars(select(Product).order_by(Product.id)).all()
-    content=products_excel(rows)
+    branch_qty={x.product_id:x.stock for x in db.scalars(select(BranchStock)).all()}
+    content=products_excel(rows,branch_qty)
     return StreamingResponse(content,
         media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         headers={'Content-Disposition':'attachment; filename="MegaBot_Inventario.xlsx"',
@@ -473,6 +516,7 @@ class SaleIn(BaseModel):
     other_expenses:Decimal=Field(default=0,ge=0)
     extra_income:Decimal=Field(default=0,ge=0)
     items:list[SaleItemIn]=Field(min_length=1,max_length=30)
+    location:Literal['tienda','lapaz']='tienda'
 
 @app.post('/api/sales',status_code=201)
 async def create_sale(data:SaleIn,user=Depends(check_csrf),db:Session=Depends(get_db)):
@@ -480,23 +524,28 @@ async def create_sale(data:SaleIn,user=Depends(check_csrf),db:Session=Depends(ge
     if len(set(ids))!=len(ids):raise HTTPException(422,'No repitas el mismo producto: aumenta su cantidad')
     products=db.scalars(select(Product).where(Product.id.in_(ids)).with_for_update()).all()
     by_id={p.id:p for p in products}
+    branch_map={}
+    if data.location=='lapaz':
+        branch_map={b.product_id:b for b in db.scalars(select(BranchStock).where(BranchStock.product_id.in_(ids)).with_for_update()).all()}
     subtotal=Decimal('0')
     for item in data.items:
         p=by_id.get(item.product_id)
         if not p or not p.active:raise HTTPException(422,f'Producto {item.product_id} no disponible')
-        if p.stock<item.quantity:raise HTTPException(409,f'Sin stock suficiente: {p.name}')
+        available=(branch_map.get(p.id).stock if branch_map.get(p.id) else 0) if data.location=='lapaz' else p.stock
+        if available<item.quantity:raise HTTPException(409,f'Sin stock suficiente en {"La Paz" if data.location=="lapaz" else "Tienda"}: {p.name} ({available} disponibles)')
         subtotal+=p.sale_price*item.quantity
     total=subtotal+money(data.extra_income)
     if money(data.paid_amount)>total:raise HTTPException(422,'Pago mayor al total de la venta')
     s=Sale(client=data.client.strip() or 'Cliente',phone=data.phone.strip(),payment_method=data.payment_method,
            paid_amount=money(data.paid_amount),transport_cost=money(data.transport_cost),
-           other_expenses=money(data.other_expenses),extra_income=money(data.extra_income))
+           other_expenses=money(data.other_expenses),extra_income=money(data.extra_income),location=data.location)
     db.add(s);db.flush()
     if s.paid_amount>0:
         db.add(PaymentRecord(sale_id=s.id,admin_id=user['id'],amount=s.paid_amount,method=s.payment_method))
     for item in data.items:
         p=by_id[item.product_id]
-        p.stock-=item.quantity
+        if data.location=='lapaz':branch_map[p.id].stock-=item.quantity
+        else:p.stock-=item.quantity
         s.lines.append(SaleLine(product_id=p.id,product_name=p.name,quantity=item.quantity,
                                 unit_price=p.sale_price,unit_cost=p.purchase_cost))
     audit(db,user,'sale.create',str(s.id))
@@ -512,9 +561,15 @@ async def cancel_sale(sale_id:int,user=Depends(check_csrf),db:Session=Depends(ge
     s=db.scalar(select(Sale).options(selectinload(Sale.lines)).where(Sale.id==sale_id).with_for_update())
     if not s:raise HTTPException(404,'Venta no encontrada')
     if s.status=='Cancelada':raise HTTPException(409,'Ya estaba cancelada')
-    for line in s.lines:
-        p=db.get(Product,line.product_id)
-        if p:p.stock+=line.quantity
+    for line in sorted(s.lines,key=lambda x:x.product_id):
+        p=db.scalar(select(Product).where(Product.id==line.product_id).with_for_update())
+        if p:
+            if s.location=='lapaz':
+                branch=db.scalar(select(BranchStock).where(BranchStock.product_id==p.id).with_for_update())
+                if not branch:
+                    branch=BranchStock(product_id=p.id,stock=0);db.add(branch)
+                branch.stock+=line.quantity
+            else:p.stock+=line.quantity
     s.status='Cancelada';audit(db,user,'sale.cancel',str(sale_id));db.commit();await broadcast()
     return {'ok':True}
 
