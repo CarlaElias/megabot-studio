@@ -61,6 +61,21 @@ class Product(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     photos: Mapped[list['Photo']] = relationship(back_populates='product', cascade='all, delete-orphan')
 
+class BranchStock(Base):
+    __tablename__='branch_stocks'
+    product_id: Mapped[int] = mapped_column(ForeignKey('products.id'), primary_key=True)
+    stock: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+class BranchTransfer(Base):
+    __tablename__='branch_transfers'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey('products.id'), nullable=False)
+    admin_id: Mapped[int] = mapped_column(ForeignKey('admins.id'), nullable=False)
+    source_location: Mapped[str] = mapped_column(String(12), nullable=False)
+    target_location: Mapped[str] = mapped_column(String(12), nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
 class Photo(Base):
     __tablename__='photos'
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -78,6 +93,7 @@ class Sale(Base):
     transport_cost: Mapped[Decimal] = mapped_column(Numeric(12,2), default=0)
     other_expenses: Mapped[Decimal] = mapped_column(Numeric(12,2), default=0)
     extra_income: Mapped[Decimal] = mapped_column(Numeric(12,2), default=0)
+    location: Mapped[str] = mapped_column(String(12), default='tienda', nullable=False)
     status: Mapped[str] = mapped_column(String(20), default='Confirmada')
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     lines: Mapped[list['SaleLine']] = relationship(back_populates='sale', cascade='all, delete-orphan')
