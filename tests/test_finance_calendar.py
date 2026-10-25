@@ -2,11 +2,17 @@
 from tests.test_smoke import F
 from fastapi.testclient import TestClient
 from app.main import app
-from app.models import init_db
+from app.models import init_db, SessionLocal, Admin
+from app.security import ph
+from sqlalchemy import select
 
 
 def test_finance_by_location_and_delivery_lifecycle():
     init_db()
+    with SessionLocal() as db:
+        if not db.scalar(select(Admin).where(Admin.username == 'admin1')):
+            db.add(Admin(username='admin1', display_name='Prueba Uno', password_hash=ph.hash('LongPasswordTest1!')))
+            db.commit()
     with TestClient(app) as c:
         login = c.post('/api/login', json={'username': 'admin1', 'password': 'LongPasswordTest1!'})
         assert login.status_code == 200, login.text
