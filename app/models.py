@@ -118,6 +118,8 @@ class Delivery(Base):
     scheduled_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     status: Mapped[str] = mapped_column(String(30), default='Pendiente')
     notes: Mapped[str] = mapped_column(String(500), default='')
+    phone: Mapped[str] = mapped_column(String(40), default='', nullable=False)
+    product_summary: Mapped[str] = mapped_column(String(240), default='', nullable=False)
 
 class GenerationJob(Base):
     __tablename__='generation_jobs'

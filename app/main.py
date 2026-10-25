@@ -618,12 +618,15 @@ class DeliveryIn(BaseModel):
     location:str=Field(min_length=1,max_length=250)
     scheduled_at:datetime
     notes:str=Field(default='',max_length=500)
+    phone:str=Field(default='',max_length=40)
+    product_summary:str=Field(default='',max_length=240)
 
 @app.post('/api/deliveries',status_code=201)
 async def create_delivery(data:DeliveryIn,user=Depends(check_csrf),db:Session=Depends(get_db)):
     if data.sale_id and not db.get(Sale,data.sale_id):raise HTTPException(422,'Venta no encontrada')
     d=Delivery(sale_id=data.sale_id,client=data.client,location=data.location,
-               scheduled_at=data.scheduled_at.replace(tzinfo=None),notes=data.notes)
+               scheduled_at=data.scheduled_at.replace(tzinfo=None),notes=data.notes,
+               phone=data.phone.strip(),product_summary=data.product_summary.strip())
     db.add(d);db.flush();audit(db,user,'delivery.create',str(d.id));db.commit();await broadcast()
     return {'id':d.id}
 
@@ -631,7 +634,23 @@ async def create_delivery(data:DeliveryIn,user=Depends(check_csrf),db:Session=De
 def deliveries(user=Depends(authenticated),db:Session=Depends(get_db)):
     result=db.scalars(select(Delivery).order_by(Delivery.scheduled_at).limit(500)).all()
     return [{'id':d.id,'sale_id':d.sale_id,'client':d.client,'location':d.location,'scheduled_at':d.scheduled_at.isoformat(),
-             'status':d.status,'notes':d.notes} for d in result]
+             'status':d.status,'notes':d.notes,'phone':d.phone,'product_summary':d.product_summary} for d in result]
+
+@app.put('/api/deliveries/{delivery_id}')
+async def update_delivery(delivery_id:int,data:DeliveryIn,user=Depends(check_csrf),db:Session=Depends(get_db)):
+    delivery=db.get(Delivery,delivery_id)
+    if not delivery:raise HTTPException(404,'Entrega no encontrada')
+    if data.sale_id and not db.get(Sale,data.sale_id):raise HTTPException(422,'Venta no encontrada')
+    delivery.client=data.client.strip()
+    delivery.location=data.location.strip()
+    delivery.scheduled_at=data.scheduled_at.replace(tzinfo=None)
+    delivery.phone=data.phone.strip()
+    delivery.product_summary=data.product_summary.strip()
+    delivery.notes=data.notes
+    if data.sale_id is not None:delivery.sale_id=data.sale_id
+    audit(db,user,'delivery.update',str(delivery_id))
+    db.commit();await broadcast()
+    return {'ok':True,'id':delivery.id}
 
 class StatusInput(BaseModel):
     status:Literal['Pendiente','Confirmado','En camino','Entregado','Cancelado']
@@ -744,16 +763,38 @@ def notifications(user=Depends(authenticated),db:Session=Depends(get_db)):
 @app.get('/api/dashboard')
 def dashboard(user=Depends(authenticated),db:Session=Depends(get_db)):
     products=db.scalars(select(Product).where(Product.active==True)).all()
+    branch_stocks={row.product_id:row.stock for row in db.scalars(select(BranchStock)).all()}
     sales=db.scalars(select(Sale).options(selectinload(Sale.lines)).where(Sale.status=='Confirmada')).all()
-    data=[serial_sale(s) for s in sales]
     jobs=db.scalars(select(GenerationJob)).all()
-    return {'products':len(products),'stock':sum(x.stock for x in products),
-            'investment':round(sum(float(x.purchase_cost)*x.stock for x in products),2),
-            'sales_count':len(sales),'sales_total':round(sum(s['total'] for s in data),2),
-            'profit_total':round(sum(s['profit'] for s in data),2),
-            'pending_balance':round(sum(s['balance'] for s in data),2),
-            'images':sum(j.completed for j in jobs),
-            'jobs_running':sum(1 for j in jobs if j.status in ['running','queued'])}
+
+    def fresh():
+        return {'stock':0,'investment':Decimal('0.00'),'sales_count':0,
+                'sales_total':Decimal('0.00'),'profit_total':Decimal('0.00'),
+                'pending_balance':Decimal('0.00')}
+    branches={'tienda':fresh(),'lapaz':fresh()}
+    for p in products:
+        for key,qty in (('tienda',p.stock),('lapaz',branch_stocks.get(p.id,0))):
+            branches[key]['stock']+=qty
+            branches[key]['investment']+=p.purchase_cost*qty
+    for sale in sales:
+        dest=branches.get(sale.location,branches['tienda'])
+        subtotal=sum((line.quantity*line.unit_price for line in sale.lines),Decimal('0'))
+        cost=sum((line.quantity*line.unit_cost for line in sale.lines),Decimal('0'))
+        total=subtotal+sale.extra_income
+        profit=total-cost-sale.transport_cost-sale.other_expenses
+        dest['sales_count']+=1
+        dest['sales_total']+=total
+        dest['profit_total']+=profit
+        dest['pending_balance']+=max(total-sale.paid_amount,Decimal('0'))
+
+    def public(d):
+        return {k:round(float(v),2) if isinstance(v,Decimal) else v for k,v in d.items()}
+    total={key:sum((branch[key] for branch in branches.values()),Decimal('0') if key.endswith(('total','balance')) or key=='investment' else 0) for key in branches['tienda']}
+    summary=public(total)
+    return {'products':len(products),**summary,
+            'branches':{k:public(v) for k,v in branches.items()},
+            'images':sum(job.completed for job in jobs),
+            'jobs_running':sum(1 for job in jobs if job.status in ('running','queued'))}
 
 @app.get('/api/push/config')
 def push_config(user=Depends(authenticated)):

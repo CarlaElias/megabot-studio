@@ -28,7 +28,6 @@ async function refresh(){
 async function refreshOnce(){
  if(!st.me)return;
  try{
-  // Limitar la concurrencia: un backend gratuito con 2 conexiones no soporta 7 lecturas simultáneas.
   const paths=['/products','/wholesale','/sales','/deliveries','/jobs','/notifications','/dashboard'];
   const responses=[];
   for(let i=0;i<paths.length;i+=2){
@@ -53,6 +52,7 @@ function renderMetrics(){let x=st.dashboard||{};let metrics=[['▤','Productos a
  $('#metrics').innerHTML=metrics.map(a=>`<div class="metric"><div class="icon">${a[0]}</div><strong>${esc(a[2])}</strong><span>${esc(a[1])}</span></div>`).join('');
  $('#homeSales').innerHTML=st.sales.slice(0,4).map(s=>`<div class="list-item"><div><strong>Venta #${s.id} · ${esc(s.client)}</strong><small>${esc(s.created_at.slice(0,16).replace('T',' '))}</small></div><strong>${bs(s.total)}</strong></div>`).join('')||'<p>Sin ventas registradas.</p>';
  $('#homeJobs').innerHTML=st.jobs.slice(0,4).map(j=>jobRow(j,false)).join('')||'<p>Sin lotes de imágenes.</p>';
+ renderBranchFinance();
 }
 function renderProducts(){let q=($('#searchProducts').value||'').toLowerCase();const wholesaleIds=new Set(st.wholesale.map(w=>w.product_id));let filtered=st.products.filter(p=>!wholesaleIds.has(p.id)&&(p.name+' '+p.sku).toLowerCase().includes(q)).sort((a,b)=>a.id-b.id);
  $('#productCards').innerHTML=filtered.map(p=>`<article class="product-card">${p.photos.length?`<img src="${p.photos[0].url}" alt="Fotografía del producto">`:'<div class="product-placeholder">▤</div>'}<div class="product-name">${esc(p.name)}</div><div class="product-meta"><span>${esc(p.sku)}</span><span>${esc(p.category)}</span></div><div class="product-meta"><span>Stock: ${p.stock}</span><span>${p.photos.length} fotos</span></div><div class="product-price">${bs(p.sale_price)}</div><div class="product-meta"><span>Costo privado: ${bs(p.purchase_cost)}</span><span>${p.active?'Activo':'Archivado'}</span></div><div class="product-actions"><button class="mini" data-edit="${p.id}">Editar / fotos</button><button class="mini" data-ad="${p.id}">Crear anuncio</button><button class="mini" data-gen="${p.id}">50 imágenes</button>${p.active?`<button class="mini danger" data-archive="${p.id}">Archivar</button>`:''}</div></article>`).join('')||'<p>No hay productos. Usa «Nuevo producto» para registrar el primero.</p>';}
@@ -104,7 +104,69 @@ function calculateSale(){const p=st.products.find(x=>x.id===Number($('#saleProdu
  $('#salePreview').textContent=`${location==='lapaz'?'Sucursal La Paz':'Tienda por menor'} · Total estimado: ${bs(total)} · Ganancia estimada: ${bs(profit)} · Stock disponible: ${available}`;
  return total;
 }
-function renderDeliveries(){let filter=$('#deliveryFilter').value;let rows=st.deliveries.filter(d=>!filter||d.scheduled_at.slice(0,10)===filter);$('#deliveryList').innerHTML=rows.map(d=>`<div class="list-item"><div><strong>${esc(d.client)} · ${esc(d.scheduled_at.slice(0,16).replace('T',' '))}</strong><small>${esc(d.location)}</small><small>${esc(d.notes)}</small></div><select class="delivery-select" data-delivery="${d.id}">${['Pendiente','Confirmado','En camino','Entregado','Cancelado'].map(x=>`<option ${x===d.status?'selected':''}>${x}</option>`).join('')}</select></div>`).join('')||'<p>No hay entregas para esta fecha.</p>'}
+function renderBranchFinance(){
+ const dest=$('#branchFinance');if(!dest)return;
+ const data=st.dashboard?.branches||{};
+ const cards=[['tienda','Tienda por menor','▤'],['lapaz','Sucursal La Paz','⌂']];
+ const make=(key,label,icon)=>{
+  const d=data[key]||{};
+  return `<article class="finance-card"><div class="finance-card-heading"><span class="finance-symbol">${icon}</span><div><small>RENTABILIDAD POR SUCURSAL</small><h3>${label}</h3></div></div><div class="finance-grid"><div><small>Capital en inventario</small><strong>${bs(d.investment)}</strong></div><div><small>Ganancia estimada</small><strong class="finance-profit">${bs(d.profit_total)}</strong></div><div><small>Ventas confirmadas</small><strong>${bs(d.sales_total)}</strong></div><div><small>Unidades disponibles</small><strong>${d.stock||0}</strong></div></div></article>`;
+ };
+ dest.innerHTML=cards.map(x=>make(...x)).join('')+`<div class="finance-footnote">El capital corresponde al costo de compra de las unidades disponibles por sucursal. La ganancia de ventas confirmadas descuenta el costo de los artículos y los gastos de transporte/venta registrados; no incluye gastos generales ni impuestos.</div>`;
+ const saleSummary=$('#branchFinanceSales');if(saleSummary)saleSummary.innerHTML=dest.innerHTML;
+
+}
+
+const calendarState={selected:localDate(new Date()),month:new Date().getFullYear(),monthIndex:new Date().getMonth()};
+function localDate(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+function safeStatus(s){return {'Pendiente':'pendiente','Confirmado':'confirmado','En camino':'en-camino','Entregado':'entregado','Cancelado':'cancelado'}[s]||'pendiente'}
+function formatDateDay(iso){const [y,m,d]=iso.split('-').map(Number);return new Date(y,m-1,d).toLocaleDateString('es-BO',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}
+function setCalendarDay(iso){
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(iso))return;
+ calendarState.selected=iso;
+ const [year,month]=iso.split('-').map(Number);
+ calendarState.month=year;calendarState.monthIndex=month-1;
+ $('#deliveryFilter').value=iso;
+ renderDeliveries();
+}
+function renderDeliveries(){
+ const all=st.deliveries||[],today=localDate(new Date());
+ const day=calendarState.selected;
+ const present=all.filter(x=>x.scheduled_at.slice(0,10)===day).sort((a,b)=>a.scheduled_at.localeCompare(b.scheduled_at));
+ const dcounts={pending:all.filter(x=>!['Entregado','Cancelado'].includes(x.status)).length,today:all.filter(x=>x.scheduled_at.slice(0,10)===today&&x.status!=='Cancelado').length,done:all.filter(x=>x.status==='Entregado').length};
+ $('#deliveryStats').innerHTML=`<div><span class="delivery-stat-icon">◷</span><strong>${dcounts.today}</strong><small>Entregas de hoy</small></div><div><span class="delivery-stat-icon">✦</span><strong>${dcounts.pending}</strong><small>Por completar</small></div><div><span class="delivery-stat-icon">✓</span><strong>${dcounts.done}</strong><small>Entregadas</small></div>`;
+ const first=new Date(calendarState.month,calendarState.monthIndex,1);
+ const last=new Date(calendarState.month,calendarState.monthIndex+1,0).getDate();
+ const offset=(first.getDay()+6)%7;const cells=Math.ceil((offset+last)/7)*7;
+ const title=first.toLocaleDateString('es-BO',{month:'long',year:'numeric'});
+ $('#calendarMonth').textContent=title.charAt(0).toUpperCase()+title.slice(1);
+ const perDay={};all.forEach(x=>{const key=x.scheduled_at.slice(0,10);(perDay[key]??=[]).push(x)});
+ const buttons=[];
+ for(let i=0;i<cells;i++){
+  const dateObj=new Date(calendarState.month,calendarState.monthIndex,i-offset+1);
+  const key=localDate(dateObj),inside=dateObj.getMonth()===calendarState.monthIndex;
+  const items=perDay[key]||[],chosen=key===day;
+  const dots=[...new Set(items.map(x=>safeStatus(x.status)))].slice(0,3).map(status=>`<i class="status-dot ${status}"></i>`).join('');
+  buttons.push(`<button type="button" class="calendar-day${inside?'':' outside'}${chosen?' selected':''}${key===today?' is-today':''}" data-calendar-day="${key}" aria-label="${formatDateDay(key)}, ${items.length} entregas" aria-pressed="${chosen}"><span class="calendar-day-number">${dateObj.getDate()}</span><span class="calendar-day-markers">${dots}</span>${items.length?`<small>${items.length}</small>`:''}</button>`);
+ }
+ $('#calendarGrid').innerHTML=buttons.join('');
+ $('#deliveryFilter').value=day;
+ $('#calendarSelected').textContent=formatDateDay(day);
+ $('#calendarDayCount').textContent=`${present.length} ${present.length===1?'entrega programada':'entregas programadas'}`;
+ $('#deliveryList').innerHTML=present.map(x=>`<article class="delivery-card"><div class="delivery-card-head"><div><span class="delivery-hour">${esc(x.scheduled_at.slice(11,16))}</span><strong>${esc(x.client)}</strong></div><span class="delivery-chip ${safeStatus(x.status)}">${esc(x.status)}</span></div><div class="delivery-details">${x.product_summary?`<div>📦 <span>${esc(x.product_summary)}</span></div>`:''}<div>📍 <span>${esc(x.location)}</span></div>${x.phone?`<div>☎ <span>${esc(x.phone)}</span></div>`:''}${x.notes?`<div>✎ <span>${esc(x.notes)}</span></div>`:''}</div><div class="delivery-actions"><label>Estado<select class="delivery-select" data-delivery="${x.id}">${['Pendiente','Confirmado','En camino','Entregado','Cancelado'].map(s=>`<option value="${s}" ${s===x.status?'selected':''}>${s}</option>`).join('')}</select></label><button class="mini" data-edit-delivery="${x.id}">✎ Editar entrega</button></div></article>`).join('')||'<div class="delivery-empty"><span>▦</span><strong>Sin entregas este día</strong><p>Selecciona otra fecha o programa una nueva entrega.</p></div>';
+}
+function resetDeliveryEditor(){
+ $('#deliveryForm').reset();$('#deliveryEditId').value='';$('#deliveryEditorTitle').textContent='Programar nueva entrega';$('#deliverySaveBtn').textContent='+ Guardar entrega';$('#deliveryCancelEdit').classList.add('hidden');
+}
+function openDeliveryEditor(id){
+ if(!id){resetDeliveryEditor();$('#deliveryDate').value='';}
+ else{
+  const d=st.deliveries.find(x=>x.id===id);if(!d)return;
+  $('#deliveryEditId').value=d.id;$('#deliveryClient').value=d.client;$('#deliveryPhone').value=d.phone||'';$('#deliveryProduct').value=d.product_summary||'';$('#deliveryDate').value=d.scheduled_at.slice(0,16);$('#deliveryLocation').value=d.location;$('#deliveryNotes').value=d.notes||'';
+  $('#deliveryEditorTitle').textContent='Editar entrega de '+d.client;$('#deliverySaveBtn').textContent='✓ Guardar cambios';$('#deliveryCancelEdit').classList.remove('hidden');
+ }
+ $('#deliveryEditor').scrollIntoView({behavior:'smooth',block:'start'});
+}
 function jobRow(j,action=true){let p=st.products.find(x=>x.id===j.product_id);let status={queued:'En espera',running:'Procesando',done:'Completado',failed:'Error'}[j.status]||j.status;let badge=j.status==='done'?'':j.status==='failed'?'fail':'warn';let per=Math.round(j.completed/j.target*100);return `<div class="list-item" style="display:block"><div style="display:flex;justify-content:space-between"><strong>Lote #${j.id} • ${esc(p?.name||'Producto')} </strong><span class="pill ${badge}">${status}</span></div><small>${j.mode==='ia'?'IA (API pagada)':'Plantillas locales'} · ${j.completed}/${j.target}</small><div class="progress"><div style="width:${per}%"></div></div>${j.error?`<small class="danger">${esc(j.error)}</small>`:''}${action?`<button class="mini" data-gallery="${j.id}">Ver imágenes</button>`:''}</div>`}
 function renderJobs(){$('#jobList').innerHTML=st.jobs.map(j=>jobRow(j)).join('')||'<p>Genera tus primeras imágenes.</p>';if(st.selectedJob)loadGallery(st.selectedJob,true)}
 function renderOptions(){const productopts=st.products.filter(p=>p.active).map(p=>`<option value="${p.id}">${esc(p.name)} · ${bs(p.sale_price)}</option>`).join('');for(const selector of ['#jobProduct','#adProduct']){let s=$(selector);let old=s.value;if(s.dataset.cache!==productopts){s.innerHTML=productopts;s.dataset.cache=productopts;s.value=old||s.options[0]?.value||''}}}
@@ -212,22 +274,10 @@ on('#branchTransferForm','submit',async e=>{
  }catch(err){toast(err.message,true)}finally{btn.disabled=false}
 });
 on('#productForm','submit',async e=>{
- e.preventDefault();
- const form=e.currentTarget, button=form.querySelector('button');
- if(button?.disabled)return;
- if(button)button.disabled=true;
- try{
-  const id=$('#productId').value;
-  const created=await api(id?`/products/${id}`:'/products',{method:id?'PUT':'POST',body:JSON.stringify(productPayload())});
-  // Un guardado confirmado por el servidor no debe perderse visualmente si la actualización tarda.
-  st.products=st.products.filter(p=>p.id!==created.id);
-  st.products.unshift(created);
-  openEditor(created.id);
-  render();
-  toast('Producto '+created.sku+' guardado. Ahora puedes subir sus fotos.');
-  await refresh();
- }catch(ex){toast(ex.message,true)}
- finally{if(button)button.disabled=false}
+ e.preventDefault();const button=e.currentTarget.querySelector('button');if(button?.disabled)return;if(button)button.disabled=true;
+ try{const id=$('#productId').value;const created=await api(id?`/products/${id}`:'/products',{method:id?'PUT':'POST',body:JSON.stringify(productPayload())});
+ st.products=st.products.filter(p=>p.id!==created.id);st.products.unshift(created);openEditor(created.id);render();toast('Producto '+created.sku+' guardado. Ahora puedes subir sus fotos.');await refresh()
+ }catch(ex){toast(ex.message,true)}finally{if(button)button.disabled=false}
 });
 on('#photoInput','change',()=>$('#photoNames').textContent=[...$('#photoInput').files].map(f=>f.name).join(' · '));
 on('#photoForm','submit',async e=>{e.preventDefault();let id=$('#productId').value;let files=$('#photoInput').files;if(!id||!files.length)return toast('Selecciona imágenes',true);let f=new FormData();for(let file of files)f.append('photos',file);try{await api(`/products/${id}/photos`,{method:'POST',body:f});$('#photoInput').value='';await refresh();openEditor(Number(id));toast('Fotografías guardadas')}catch(ex){toast(ex.message,true)}});
@@ -243,9 +293,25 @@ on('#salesList','click',async e=>{let pay=e.target.closest('[data-payment-sale]'
  try{await api(`/sales/${sale.id}/payments`,{method:'POST',body:JSON.stringify({amount:Number(amount),method})});await refresh();toast('Abono registrado')}catch(ex){toast(ex.message,true)}return;
  }let b=e.target.closest('[data-cancel-sale]');if(!b||!confirm('¿Anular venta y devolver stock? Registra el reembolso al cliente por separado.'))return;try{await api(`/sales/${b.dataset.cancelSale}/cancel`,{method:'POST'});await refresh()}catch(ex){toast(ex.message,true)}});
 on('#passwordForm','submit',async e=>{e.preventDefault();try{await api('/change-password',{method:'POST',body:JSON.stringify({old_password:$('#oldPassword').value,new_password:$('#newPassword').value})});st.me=null;st.ws?.close();showLogin();toast('Contraseña actualizada. Inicia sesión nuevamente.')}catch(ex){toast(ex.message,true)}});
-on('#deliveryForm','submit',async e=>{e.preventDefault();let obj={client:$('#deliveryClient').value,location:$('#deliveryLocation').value,scheduled_at:$('#deliveryDate').value,notes:$('#deliveryNotes').value};try{await api('/deliveries',{method:'POST',body:JSON.stringify(obj)});await refresh();toast('Entrega registrada');e.currentTarget.reset()}catch(ex){toast(ex.message,true)}});
-on('#deliveryFilter','input',renderDeliveries);
-on('#deliveryList','change',async e=>{let s=e.target.closest('[data-delivery]');if(!s)return;try{await api(`/deliveries/${s.dataset.delivery}/status`,{method:'PATCH',body:JSON.stringify({status:s.value})});await refresh()}catch(ex){toast(ex.message,true)}});
+on('#calendarPrev','click',()=>{const d=new Date(calendarState.month,calendarState.monthIndex-1,1);calendarState.month=d.getFullYear();calendarState.monthIndex=d.getMonth();renderDeliveries()});
+on('#calendarNext','click',()=>{const d=new Date(calendarState.month,calendarState.monthIndex+1,1);calendarState.month=d.getFullYear();calendarState.monthIndex=d.getMonth();renderDeliveries()});
+on('#calendarToday','click',()=>setCalendarDay(localDate(new Date())));
+on('#calendarGrid','click',e=>{const b=e.target.closest('[data-calendar-day]');if(b)setCalendarDay(b.dataset.calendarDay)});
+on('#deliveryFilter','change',e=>{if(e.target.value)setCalendarDay(e.target.value)});
+on('#calendarNew','click',()=>openDeliveryEditor());
+on('#deliveryCancelEdit','click',resetDeliveryEditor);
+on('#deliveryForm','submit',async e=>{
+ e.preventDefault();let id=$('#deliveryEditId').value;
+ const obj={client:$('#deliveryClient').value,phone:$('#deliveryPhone').value,product_summary:$('#deliveryProduct').value,location:$('#deliveryLocation').value,scheduled_at:$('#deliveryDate').value,notes:$('#deliveryNotes').value};
+ const button=$('#deliverySaveBtn');if(button.disabled)return;button.disabled=true;
+ try{
+  await api(id?`/deliveries/${id}`:'/deliveries',{method:id?'PUT':'POST',body:JSON.stringify(obj)});
+  setCalendarDay(obj.scheduled_at.slice(0,10));resetDeliveryEditor();
+  await refresh();toast(id?'Entrega actualizada':'Entrega registrada en el calendario');
+ }catch(ex){toast(ex.message,true)}finally{button.disabled=false}
+});
+on('#deliveryList','click',e=>{const b=e.target.closest('[data-edit-delivery]');if(b)openDeliveryEditor(Number(b.dataset.editDelivery))});
+on('#deliveryList','change',async e=>{const el=e.target.closest('[data-delivery]');if(!el)return;try{await api(`/deliveries/${el.dataset.delivery}/status`,{method:'PATCH',body:JSON.stringify({status:el.value})});await refresh();toast('Estado de entrega actualizado')}catch(ex){toast(ex.message,true)}});
 on('#jobForm','submit',async e=>{e.preventDefault();let mode=$('#jobMode').value,count=Number($('#jobCount').value);if(mode==='ia'&&!confirm(`Este proceso solicita ${count} imágenes a una API pagada. ¿Confirmas que aceptas los cargos según tu proveedor?`))return;try{let j=await api('/jobs',{method:'POST',body:JSON.stringify({product_id:Number($('#jobProduct').value),mode,count})});await refresh();toast(`Lote #${j.id} creado. Podrás ver el progreso en tiempo real.`)}catch(ex){toast(ex.message,true)}});
 on('#jobList','click',e=>{let b=e.target.closest('[data-gallery]');if(b)loadGallery(Number(b.dataset.gallery))});
 on('#galleryActions','click',e=>{let button=e.target.closest('button');if(!button)return;if(button.hasAttribute('data-save-all'))downloadGalleryFiles(false);else if(button.hasAttribute('data-save-approved'))downloadGalleryFiles(true);else if(button.hasAttribute('data-delete-lot'))removeGalleryJob()});
