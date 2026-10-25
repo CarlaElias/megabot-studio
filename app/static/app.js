@@ -3,7 +3,7 @@ const $ = s=>document.querySelector(s);
 const $$ = s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const bs=v=>'Bs '+Number(v||0).toFixed(2);
-const st={me:null,products:[],wholesale:[],sales:[],deliveries:[],jobs:[],notices:[],audit:[],page:'dashboard',selectedJob:null,galleryImages:[],lastNotification:null,ws:null};
+const st={me:null,products:[],wholesale:[],sales:[],deliveries:[],jobs:[],notices:[],audit:[],page:'dashboard',selectedJob:null,galleryImages:[],lastNotification:null,ws:null,branchStocks:{},branchTransfers:[]};
 function csrf(){return decodeURIComponent((document.cookie.match(/(?:^|; )megabot_csrf=([^;]+)/)||[])[1]||'')}
 async function api(path,opts={}){
  const method=opts.method||'GET';const headers=opts.headers||{};
@@ -36,6 +36,7 @@ async function refreshOnce(){
    responses.push(...group);
   }
   const [products,wholesale,sales,deliveries,jobs,notices,dashboard]=responses;
+  const location=await api('/branches/lapaz');st.branchStocks=location.stocks||{};st.branchTransfers=location.transfers||[];
   let old=st.lastNotification;st.products=products;st.wholesale=wholesale;st.sales=sales;st.deliveries=deliveries;st.jobs=jobs;st.notices=notices;st.dashboard=dashboard;
   const newest=notices[0]?.id||0;
   if(old!==null&&newest>old&&notices[0]){
@@ -47,20 +48,35 @@ async function refreshOnce(){
  }catch(e){console.error(e);$('#conn').textContent='● Sincronización pendiente'}
 }
 function navigate(page){st.page=page;$$('.page').forEach(e=>e.classList.toggle('hidden',e.id!=='page-'+page));$$('.nav').forEach(e=>e.classList.toggle('active',e.dataset.page===page));let txt=$(`.nav[data-page="${page}"] span`);$('#crumb').textContent=txt?.textContent||'Panel principal';$('.sidebar').classList.remove('open');render()}
-function render(){if(!st.me)return; renderMetrics();renderProducts();renderInventory();renderSales();renderDeliveries();renderJobs();renderOptions();renderNotifications();renderAudit();}
-function renderMetrics(){let x=st.dashboard||{};let metrics=[['▤','Productos activos',x.products||0],['◆','Ventas confirmadas',bs(x.sales_total)],['✧','Ganancia estimada',bs(x.profit_total)],['◈','Imágenes terminadas',x.images||0],['▣','Unidades disponibles',x.stock||0],['◉','Capital en stock',bs(x.investment)],['◷','Saldo por cobrar',bs(x.pending_balance)],['✦','Lotes en progreso',x.jobs_running||0]];
+function render(){if(!st.me)return; renderMetrics();renderProducts();renderInventory();renderBranches();renderSales();renderDeliveries();renderJobs();renderOptions();renderNotifications();renderAudit();}
+function renderMetrics(){let x=st.dashboard||{};let metrics=[['▤','Productos activos',x.products||0],['◆','Ventas confirmadas',bs(x.sales_total)],['✧','Ganancia estimada',bs(x.profit_total)],['◈','Imágenes terminadas',x.images||0],['▣','Unidades disponibles',st.products.reduce((acc,p)=>acc+Number(p.stock||0)+Number(st.branchStocks[p.id]||0),0)],['◉','Capital en stock',bs(st.products.reduce((acc,p)=>acc+(Number(p.stock||0)+Number(st.branchStocks[p.id]||0))*Number(p.purchase_cost||0),0))],['◷','Saldo por cobrar',bs(x.pending_balance)],['✦','Lotes en progreso',x.jobs_running||0]];
  $('#metrics').innerHTML=metrics.map(a=>`<div class="metric"><div class="icon">${a[0]}</div><strong>${esc(a[2])}</strong><span>${esc(a[1])}</span></div>`).join('');
  $('#homeSales').innerHTML=st.sales.slice(0,4).map(s=>`<div class="list-item"><div><strong>Venta #${s.id} · ${esc(s.client)}</strong><small>${esc(s.created_at.slice(0,16).replace('T',' '))}</small></div><strong>${bs(s.total)}</strong></div>`).join('')||'<p>Sin ventas registradas.</p>';
  $('#homeJobs').innerHTML=st.jobs.slice(0,4).map(j=>jobRow(j,false)).join('')||'<p>Sin lotes de imágenes.</p>';
 }
-function renderProducts(){let q=($('#searchProducts').value||'').toLowerCase();const wholesaleIds=new Set(st.wholesale.map(w=>w.product_id));let filtered=st.products.filter(p=>!wholesaleIds.has(p.id)&&(p.name+' '+p.sku).toLowerCase().includes(q));
+function renderProducts(){let q=($('#searchProducts').value||'').toLowerCase();const wholesaleIds=new Set(st.wholesale.map(w=>w.product_id));let filtered=st.products.filter(p=>!wholesaleIds.has(p.id)&&(p.name+' '+p.sku).toLowerCase().includes(q)).sort((a,b)=>a.id-b.id);
  $('#productCards').innerHTML=filtered.map(p=>`<article class="product-card">${p.photos.length?`<img src="${p.photos[0].url}" alt="Fotografía del producto">`:'<div class="product-placeholder">▤</div>'}<div class="product-name">${esc(p.name)}</div><div class="product-meta"><span>${esc(p.sku)}</span><span>${esc(p.category)}</span></div><div class="product-meta"><span>Stock: ${p.stock}</span><span>${p.photos.length} fotos</span></div><div class="product-price">${bs(p.sale_price)}</div><div class="product-meta"><span>Costo privado: ${bs(p.purchase_cost)}</span><span>${p.active?'Activo':'Archivado'}</span></div><div class="product-actions"><button class="mini" data-edit="${p.id}">Editar / fotos</button><button class="mini" data-ad="${p.id}">Crear anuncio</button><button class="mini" data-gen="${p.id}">50 imágenes</button>${p.active?`<button class="mini danger" data-archive="${p.id}">Archivar</button>`:''}</div></article>`).join('')||'<p>No hay productos. Usa «Nuevo producto» para registrar el primero.</p>';}
 function renderInventory(){
  const area=$('#inventoryFullList'),info=$('#inventorySummary');if(!area||!info)return;
  const wMap=new Map(st.wholesale.map(w=>[w.product_id,w]));
  const minor=st.products.filter(p=>!wMap.has(p.id));const majors=st.products.filter(p=>wMap.has(p.id));
- info.innerHTML=`<div class="inventory-kpi"><strong>${minor.length}</strong><small>Tienda · por menor</small></div><div class="inventory-kpi"><strong>${majors.length}</strong><small>Mayoristas</small></div><div class="inventory-kpi"><strong>${st.products.reduce((sum,p)=>sum+Number(p.stock||0),0)}</strong><small>Unidades en total</small></div>`;
- area.innerHTML=st.products.map(p=>{let w=wMap.get(p.id);return `<div class="list-item inventory-line"><div><strong>${esc(p.name)}</strong><small>${esc(p.sku)} · ${w?'Mayoristas':'Tienda'} · ${esc(p.category)}</small><small>Stock ${p.stock} ud. · Venta individual ${bs(p.sale_price)} · Costo privado ${bs(p.purchase_cost)}</small></div><button class="mini" data-inventory-edit="${p.id}">${w?'Ir a mayoristas':'Editar / fotos'}</button></div>`}).join('')||'<p>Sin productos registrados. Empieza por Tienda o Mayoristas.</p>';
+ info.innerHTML=`<div class="inventory-kpi"><strong>${st.products.reduce((sum,p)=>sum+Number(p.stock||0),0)}</strong><small>Unidades en Tienda</small></div><div class="inventory-kpi"><strong>${Object.values(st.branchStocks).reduce((x,y)=>x+Number(y||0),0)}</strong><small>Unidades en La Paz</small></div><div class="inventory-kpi"><strong>${st.products.reduce((sum,p)=>sum+Number(p.stock||0)+Number(st.branchStocks[p.id]||0),0)}</strong><small>Unidades totales</small></div>`;
+ area.innerHTML=st.products.map(p=>{let w=wMap.get(p.id);return `<div class="list-item inventory-line"><div><strong>${esc(p.name)}</strong><small>${esc(p.sku)} · ${w?'Mayoristas':'Tienda'} · ${esc(p.category)}</small><small>Tienda ${p.stock} ud. · La Paz ${Number(st.branchStocks[p.id]||0)} ud. · Total ${p.stock+Number(st.branchStocks[p.id]||0)} ud. · Venta individual ${bs(p.sale_price)} · Costo privado ${bs(p.purchase_cost)}</small></div><button class="mini" data-inventory-edit="${p.id}">${w?'Ir a mayoristas':'Editar / fotos'}</button></div>`}).join('')||'<p>Sin productos registrados. Empieza por Tienda o Mayoristas.</p>';
+}
+function renderBranches(){
+ const area=$('#branchProducts');if(!area)return;
+ const term=($('#branchSearch').value||'').toLowerCase();
+ const lp=st.products.filter(p=>Number(st.branchStocks[p.id]||0)>0&&(p.name+' '+p.sku).toLowerCase().includes(term)).sort((a,b)=>a.id-b.id);
+ const all=st.products.reduce((acc,p)=>acc+Number(st.branchStocks[p.id]||0),0);
+ $('#branchSummary').textContent=`${lp.length} productos visibles · ${all} unidades en Sucursal La Paz (todos los productos).`;
+ area.innerHTML=lp.map(p=>`<div class="list-item"><div><strong>${esc(p.name)}</strong><small>${esc(p.sku)} · ${esc(p.category)}</small><small>La Paz: ${Number(st.branchStocks[p.id]||0)} ud. · Tienda: ${p.stock} ud. · Total: ${p.stock+Number(st.branchStocks[p.id]||0)} ud.</small></div><strong>${bs(p.sale_price)}</strong></div>`).join('')||'<p class="dim">No hay productos en esta sucursal. Traslada unidades desde Tienda.</p>';
+ const dir=$('#transferDirection').value;
+ const options=st.products.filter(p=>p.active&&(dir==='tienda'?p.stock:Number(st.branchStocks[p.id]||0))>0).sort((a,b)=>a.id-b.id);
+ const sel=$('#transferProduct'),old=sel.value;
+ sel.innerHTML=options.map(p=>`<option value="${p.id}">${esc(p.sku)} · ${esc(p.name)}</option>`).join('');if(options.some(p=>String(p.id)===old))sel.value=old;
+ const p=st.products.find(p=>String(p.id)===sel.value);
+ $('#transferAvailable').textContent=p?`${dir==='tienda'?p.stock:Number(st.branchStocks[p.id]||0)} unidades en ${dir==='tienda'?'Tienda':'La Paz'}`:'Sin productos disponibles';
+ $('#branchHistory').innerHTML=st.branchTransfers.map(t=>`<div class="list-item"><div><strong>${esc(t.sku)} · ${esc(t.name)}</strong><small>${t.source==='tienda'?'Tienda':'La Paz'} → ${t.target==='lapaz'?'La Paz':'Tienda'} · ${t.quantity} unidades</small><small>${esc(t.created_at?.slice(0,16).replace('T',' ')||'')}</small></div></div>`).join('')||'<p class="dim">Todavía no se realizaron traslados.</p>';
 }
 function productPayload(){return {name:$('#productName').value,category:$('#productCategory').value,description:$('#productDescription').value,sale_price:$('#productPrice').value,purchase_cost:$('#productCost').value,stock:Number($('#productStock').value)}}
 function openEditor(id){let p=st.products.find(v=>v.id===id);$('#productEditor').classList.remove('hidden');$('#editorTitle').textContent=p?'Editar producto y fotografías':'Registrar producto';$('#productId').value=p?.id||'';$('#productSku').value=p?.sku||'';$('#productSku').placeholder=p?'Código permanente':'Se asignará automáticamente: TDA-…';$('#productName').value=p?.name||'';$('#productCategory').value=p?.category||'Hogar';$('#productDescription').value=p?.description||'';$('#productPrice').value=p?.sale_price??'';$('#productCost').value=p?.purchase_cost??'';$('#productStock').value=p?.stock??'0';$('#photoManager').classList.toggle('hidden',!p);renderPhotos(p);$('#productEditor').scrollIntoView({behavior:'smooth',block:'start'})}
@@ -70,8 +86,24 @@ function whCalc(){let q=Number($('#whPackQty').value)||0,c=Number($('#whCartonQt
 function clearWholesale(){let f=$('#wholesaleForm');f.reset();$('#wholesaleId').value='';$('#wholesaleFormTitle').textContent='Registrar nuevo producto';$('#whCategory').value='Mayoristas';whCalc()}
 function editWholesale(id){let w=st.wholesale.find(w=>w.id===id);if(!w)return;const ids={whName:'name',whCategory:'category',whDescription:'description',whStock:'stock',whPackQty:'units_per_pack',whCartonQty:'units_per_carton',whMinQty:'min_wholesale_qty',whColors:'colors',whSupplier:'supplier',whCost:'purchase_cost',whExtra:'other_unit_cost',whRetail:'sale_price',whPrice:'wholesale_unit_price',whPackPrice:'pack_total_price',whCartonPrice:'carton_total_price'};for(let [id,key]of Object.entries(ids))$('#'+id).value=w[key]??'';$('#wholesaleId').value=w.id;$('#wholesaleFormTitle').textContent='Editar '+w.sku;$('#whPhotos').value='';whCalc();$('#wholesaleForm').scrollIntoView({behavior:'smooth'})}
 function renderWholesale(){const area=$('#wholesaleList');if(!area)return;area.innerHTML=st.wholesale.map(w=>`<div class="list-item wh-card"><div class="wh-card-main">${w.photo?`<img class="wh-img" src="/api/photos/${w.photo}" alt="Producto original">`:'<div class="wh-img wh-placeholder">Sin foto</div>'}<div><strong>${esc(w.name)}</strong><small>${esc(w.sku)} · ${w.stock} unidades disponibles</small><small>${esc(w.colors)||'Sin colores especificados'}</small><small>Embalaje ${w.units_per_pack} ud. · Cajón ${w.units_per_carton} ud.</small><small>Venta mayorista ${bs(w.wholesale_unit_price)} / ud. (desde ${w.min_wholesale_qty})</small><small class="wh-profit">Ganancia bruta por unidad: ${bs(w.wholesale_profit)} · por cajón: ${bs(w.carton_profit)}</small></div></div><div class="wh-actions"><button class="mini" data-wh-edit="${w.id}">Editar</button><a class="mini" href="/api/wholesale/${w.id}/poster?style=premium" download="${esc(w.sku)}_premium.jpg">⇩ Afiche premium</a><a class="mini" href="/api/wholesale/${w.id}/poster?style=oferta" download="${esc(w.sku)}_oferta.jpg">⇩ Afiche oferta</a><button class="mini" data-wh-photo="${w.product_id}">Añadir foto</button></div></div>`).join('')||'<p>Registra tu primer producto mayorista para crear anuncios y calcular ganancias.</p>'}
-function renderSales(){let options=st.products.filter(p=>p.active&&p.stock>0);const select=$('#saleProduct');let old=select.value;select.innerHTML=options.map(p=>`<option value="${p.id}">${esc(p.name)} · ${bs(p.sale_price)} · ${p.stock} ud.</option>`).join('');if(old)select.value=old;$('#salesList').innerHTML=st.sales.map(s=>`<div class="list-item"><div><strong>#${s.id} ${esc(s.client)}</strong><small>${esc(s.created_at.slice(0,16).replace('T',' '))} • ${esc(s.payment_method)} • ${esc(s.status)}</small><small>Ganancia est.: ${bs(s.profit)} • Por cobrar: ${bs(s.balance)}</small></div><div style="text-align:right"><strong>${bs(s.total)}</strong><div>${s.status==='Confirmada'?`${s.balance>0?`<button class="mini" data-payment-sale="${s.id}">+ Abono</button>`:''}<button class="mini danger" data-cancel-sale="${s.id}">Anular</button>`:''}</div></div></div>`).join('')||'<p>Todavía no registraste ventas.</p>';calculateSale()}
-function calculateSale(){let p=st.products.find(x=>x.id===Number($('#saleProduct').value));let q=Number($('#saleQty').value||0);let transport=Number($('#saleTransport').value||0),extra=Number($('#saleExtra').value||0),expenses=Number($('#saleExpenses').value||0);let total=(p?.sale_price||0)*q+extra;let profit=total-(p?.purchase_cost||0)*q-transport-expenses;$('#salePreview').textContent=`Total estimado: ${bs(total)} · Ganancia estimada: ${bs(profit)} · Stock disponible: ${p?.stock||0}`;return total}
+function renderSales(){
+ const location=$('#saleLocation').value;
+ const available=p=>location==='lapaz'?Number(st.branchStocks[p.id]||0):Number(p.stock||0);
+ const options=st.products.filter(p=>p.active&&available(p)>0).sort((a,b)=>a.id-b.id);
+ const select=$('#saleProduct'),old=select.value;
+ select.innerHTML=options.map(p=>`<option value="${p.id}">${esc(p.name)} · ${bs(p.sale_price)} · ${available(p)} ud.</option>`).join('');
+ if(options.some(p=>String(p.id)===old))select.value=old;
+ $('#salesList').innerHTML=st.sales.map(s=>`<div class="list-item"><div><strong>#${s.id} ${esc(s.client)}</strong><small>${esc(s.created_at.slice(0,16).replace('T',' '))} • ${esc(s.payment_method)} • ${esc(s.status)} • ${s.location==='lapaz'?'Sucursal La Paz':'Tienda por menor'}</small><small>Ganancia est.: ${bs(s.profit)} • Por cobrar: ${bs(s.balance)}</small></div><div style="text-align:right"><strong>${bs(s.total)}</strong><div>${s.status==='Confirmada'?`${s.balance>0?`<button class="mini" data-payment-sale="${s.id}">+ Abono</button>`:''}<button class="mini danger" data-cancel-sale="${s.id}">Anular</button>`:''}</div></div></div>`).join('')||'<p>Todavía no registraste ventas.</p>';
+ calculateSale();
+}
+function calculateSale(){const p=st.products.find(x=>x.id===Number($('#saleProduct').value));
+ const q=Number($('#saleQty').value||0),location=$('#saleLocation').value;
+ const transport=Number($('#saleTransport').value||0),extra=Number($('#saleExtra').value||0),expenses=Number($('#saleExpenses').value||0);
+ const available=p?(location==='lapaz'?Number(st.branchStocks[p.id]||0):Number(p.stock||0)):0;
+ const total=(p?.sale_price||0)*q+extra,profit=total-(p?.purchase_cost||0)*q-transport-expenses;
+ $('#salePreview').textContent=`${location==='lapaz'?'Sucursal La Paz':'Tienda por menor'} · Total estimado: ${bs(total)} · Ganancia estimada: ${bs(profit)} · Stock disponible: ${available}`;
+ return total;
+}
 function renderDeliveries(){let filter=$('#deliveryFilter').value;let rows=st.deliveries.filter(d=>!filter||d.scheduled_at.slice(0,10)===filter);$('#deliveryList').innerHTML=rows.map(d=>`<div class="list-item"><div><strong>${esc(d.client)} · ${esc(d.scheduled_at.slice(0,16).replace('T',' '))}</strong><small>${esc(d.location)}</small><small>${esc(d.notes)}</small></div><select class="delivery-select" data-delivery="${d.id}">${['Pendiente','Confirmado','En camino','Entregado','Cancelado'].map(x=>`<option ${x===d.status?'selected':''}>${x}</option>`).join('')}</select></div>`).join('')||'<p>No hay entregas para esta fecha.</p>'}
 function jobRow(j,action=true){let p=st.products.find(x=>x.id===j.product_id);let status={queued:'En espera',running:'Procesando',done:'Completado',failed:'Error'}[j.status]||j.status;let badge=j.status==='done'?'':j.status==='failed'?'fail':'warn';let per=Math.round(j.completed/j.target*100);return `<div class="list-item" style="display:block"><div style="display:flex;justify-content:space-between"><strong>Lote #${j.id} • ${esc(p?.name||'Producto')} </strong><span class="pill ${badge}">${status}</span></div><small>${j.mode==='ia'?'IA (API pagada)':'Plantillas locales'} · ${j.completed}/${j.target}</small><div class="progress"><div style="width:${per}%"></div></div>${j.error?`<small class="danger">${esc(j.error)}</small>`:''}${action?`<button class="mini" data-gallery="${j.id}">Ver imágenes</button>`:''}</div>`}
 function renderJobs(){$('#jobList').innerHTML=st.jobs.map(j=>jobRow(j)).join('')||'<p>Genera tus primeras imágenes.</p>';if(st.selectedJob)loadGallery(st.selectedJob,true)}
@@ -164,6 +196,21 @@ on('#wholesaleList','click',async e=>{let ed=e.target.closest('[data-wh-edit]'),
 on('#inventoryFullList','click',e=>{const b=e.target.closest('[data-inventory-edit]');if(!b)return;let id=Number(b.dataset.inventoryEdit),w=st.wholesale.find(w=>w.product_id===id);if(w){navigate('wholesale');editWholesale(w.id)}else{navigate('products');openEditor(id)}});
 on('#newProduct','click',()=>openEditor());on('#closeEditor','click',()=>$('#productEditor').classList.add('hidden'));
 on('#searchProducts','input',renderProducts);
+on('#branchSearch','input',renderBranches);
+on('#transferDirection','change',renderBranches);
+on('#transferProduct','change',renderBranches);
+on('#saleLocation','change',renderSales);
+on('#branchTransferForm','submit',async e=>{
+ e.preventDefault();const btn=e.currentTarget.querySelector('button');if(btn.disabled)return;
+ const p=Number($('#transferProduct').value),q=Number($('#transferQuantity').value),source=$('#transferDirection').value;
+ if(!p||!Number.isInteger(q)||q<=0)return toast('Selecciona producto y cantidad válida',true);
+ if(!confirm(`¿Trasladar ${q} unidades de ${source==='tienda'?'Tienda':'La Paz'} a ${source==='tienda'?'La Paz':'Tienda'}?`))return;
+ btn.disabled=true;
+ try{const result=await api('/branches/lapaz/transfer',{method:'POST',body:JSON.stringify({product_id:p,quantity:q,source_location:source})});
+  toast(`Traslado confirmado: ${result.sku}. Tienda ${result.tienda_stock} ud., La Paz ${result.lapaz_stock} ud.`);
+  await refresh();
+ }catch(err){toast(err.message,true)}finally{btn.disabled=false}
+});
 on('#productForm','submit',async e=>{
  e.preventDefault();
  const form=e.currentTarget, button=form.querySelector('button');
@@ -187,7 +234,7 @@ on('#photoForm','submit',async e=>{e.preventDefault();let id=$('#productId').val
 on('#productCards','click',async e=>{let b=e.target.closest('button');if(!b)return;let {edit,ad,gen,archive}=b.dataset;try{if(edit)openEditor(Number(edit));if(ad){navigate('ads');$('#adProduct').value=ad;await loadAds()}if(gen){navigate('studio');$('#jobProduct').value=gen}if(archive&&confirm('¿Archivar el producto? Se conservará en el historial.')){await api(`/products/${archive}/archive`,{method:'POST'});await refresh()}}catch(ex){toast(ex.message,true)}});
 on('#existingPhotos','click',async e=>{let b=e.target.closest('[data-photo-delete]');if(!b||!confirm('¿Eliminar la fotografía?'))return;try{await api(`/photos/${b.dataset.photoDelete}`,{method:'DELETE'});await refresh();openEditor(Number($('#productId').value))}catch(ex){toast(ex.message,true)}});
 ['#saleProduct','#saleQty','#saleTransport','#saleExpenses','#saleExtra'].forEach(s=>on(s,'input',calculateSale));
-on('#saleForm','submit',async e=>{e.preventDefault();try{let total=calculateSale();let data={client:$('#saleClient').value,phone:$('#salePhone').value,payment_method:$('#salePayment').value,paid_amount:$('#salePaid').value||0,transport_cost:$('#saleTransport').value||0,other_expenses:$('#saleExpenses').value||0,extra_income:$('#saleExtra').value||0,items:[{product_id:Number($('#saleProduct').value),quantity:Number($('#saleQty').value)}]};if(Number(data.paid_amount)>total)return toast('El pago supera el total',true);if(!confirm(`¿Confirmar venta de ${bs(total)}? Se descontará el inventario.`))return;await api('/sales',{method:'POST',body:JSON.stringify(data)});await refresh();toast('Venta registrada e inventario actualizado')}catch(ex){toast(ex.message,true)}});
+on('#saleForm','submit',async e=>{e.preventDefault();try{let total=calculateSale();let data={client:$('#saleClient').value,phone:$('#salePhone').value,payment_method:$('#salePayment').value,paid_amount:$('#salePaid').value||0,transport_cost:$('#saleTransport').value||0,other_expenses:$('#saleExpenses').value||0,extra_income:$('#saleExtra').value||0,items:[{product_id:Number($('#saleProduct').value),quantity:Number($('#saleQty').value)}],location:$('#saleLocation').value};if(Number(data.paid_amount)>total)return toast('El pago supera el total',true);if(!confirm(`¿Confirmar venta de ${bs(total)}? Se descontará el inventario.`))return;await api('/sales',{method:'POST',body:JSON.stringify(data)});await refresh();toast('Venta registrada e inventario actualizado')}catch(ex){toast(ex.message,true)}});
 on('#salesList','click',async e=>{let pay=e.target.closest('[data-payment-sale]');if(pay){
  let sale=st.sales.find(s=>s.id===Number(pay.dataset.paymentSale));
  let amount=prompt(`Venta #${sale.id}. Saldo: ${bs(sale.balance)}. ¿Cuánto abonó el cliente?`);
