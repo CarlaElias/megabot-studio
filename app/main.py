@@ -68,7 +68,7 @@ def money(v):
 def serial_product(p):
     return {'id':p.id,'sku':p.sku,'name':p.name,'category':p.category,'description':p.description,
             'sale_price':float(p.sale_price),'purchase_cost':float(p.purchase_cost),'stock':p.stock,
-            'active':p.active,'photos':[{'id':ph.id,'url':f'/api/photos/{ph.id}'} for ph in p.photos]}
+            'active':p.active,'home_location':p.home_location,'photos':[{'id':ph.id,'url':f'/api/photos/{ph.id}'} for ph in p.photos]}
 
 def serial_sale(s):
     items=[{'product_id':l.product_id,'name':l.product_name,'quantity':l.quantity,'unit_price':float(l.unit_price),'unit_cost':float(l.unit_cost)} for l in s.lines]
@@ -242,6 +242,39 @@ class ProductInput(BaseModel):
     purchase_cost:Decimal=Field(ge=0)
     stock:int=Field(ge=0,le=1_000_000)
 
+@app.post('/api/branches/lapaz/products', status_code=201)
+async def new_lapaz_product(data:ProductInput,user=Depends(check_csrf),db:Session=Depends(get_db)):
+    """Nuevo producto exclusivo de la sucursal: el stock inicial es de La Paz, no de Tienda."""
+    p=Product(sku='PENDIENTE-'+secrets.token_hex(12),home_location='lapaz',
+              name=data.name.strip(),category=data.category.strip(),description=data.description,
+              sale_price=money(data.sale_price),purchase_cost=money(data.purchase_cost),stock=0)
+    db.add(p);db.flush()
+    code=f'LPZ-{p.id:06d}'
+    if db.scalar(select(Product.id).where(Product.sku==code)):
+        code=f'LPZ-{p.id:06d}-{secrets.token_hex(3).upper()}'
+    p.sku=code
+    db.add(BranchStock(product_id=p.id,stock=data.stock))
+    audit(db,user,'lapaz.product.create',p.sku)
+    db.commit();await broadcast()
+    result=serial_product(p);result['lapaz_stock']=data.stock
+    return result
+
+@app.put('/api/branches/lapaz/products/{product_id}')
+async def edit_lapaz_product(product_id:int,data:ProductInput,user=Depends(check_csrf),db:Session=Depends(get_db)):
+    p=db.scalar(select(Product).where(Product.id==product_id).with_for_update())
+    if not p or p.home_location!='lapaz':raise HTTPException(404,'Producto propio de La Paz no encontrado')
+    branch=db.scalar(select(BranchStock).where(BranchStock.product_id==p.id).with_for_update())
+    if not branch:
+        branch=BranchStock(product_id=p.id,stock=0);db.add(branch)
+    for key in ('name','category','description'):
+        setattr(p,key,getattr(data,key).strip())
+    p.sale_price=money(data.sale_price);p.purchase_cost=money(data.purchase_cost)
+    branch.stock=data.stock
+    audit(db,user,'lapaz.product.update',p.sku)
+    db.commit();await broadcast()
+    result=serial_product(p);result['lapaz_stock']=branch.stock
+    return result
+
 @app.get('/api/products')
 def products(user=Depends(authenticated),db:Session=Depends(get_db)):
     rows=db.scalars(select(Product).options(selectinload(Product.photos)).order_by(Product.id.asc())).all()
@@ -277,6 +310,7 @@ async def new_product(data:ProductInput,user=Depends(check_csrf),db:Session=Depe
 async def edit_product(product_id:int,data:ProductInput,user=Depends(check_csrf),db:Session=Depends(get_db)):
     p=db.get(Product,product_id)
     if not p: raise HTTPException(404,'Producto no encontrado')
+    if p.home_location=='lapaz':raise HTTPException(409,'Edita este producto desde Sucursal La Paz')
     # SKU permanente, incluso en las actualizaciones del producto.
     for key in ('name','category','description','stock'):
         setattr(p,key,getattr(data,key).strip() if isinstance(getattr(data,key),str) else getattr(data,key))
