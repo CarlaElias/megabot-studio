@@ -53,6 +53,7 @@ class Product(Base):
     sku: Mapped[str] = mapped_column(String(60), unique=True)
     name: Mapped[str] = mapped_column(String(180), nullable=False)
     category: Mapped[str] = mapped_column(String(80), default='Otros')
+    home_location: Mapped[str] = mapped_column(String(12), default='tienda', nullable=False)
     description: Mapped[str] = mapped_column(String(2000), default='')
     sale_price: Mapped[Decimal] = mapped_column(Numeric(12,2), default=0)
     purchase_cost: Mapped[Decimal] = mapped_column(Numeric(12,2), default=0)
