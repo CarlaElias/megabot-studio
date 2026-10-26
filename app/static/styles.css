@@ -112,3 +112,13 @@ input,textarea,select{background:color-mix(in srgb,var(--bg) 75%,var(--surface))
 .delivery-editor{margin-top:18px}.delivery-editor .form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 @media(max-width:1150px){.delivery-layout{grid-template-columns:1fr}.delivery-list{max-height:none}}
 @media(max-width:720px){.branch-finance{grid-template-columns:1fr}.delivery-stats{gap:7px}.delivery-stats>div{padding:12px 8px;gap:7px}.delivery-stats strong{font-size:19px}.delivery-stats small{font-size:10px}.delivery-stat-icon{width:25px;height:25px;font-size:14px}.calendar-day{min-height:55px;padding:5px;border-radius:8px}.calendar-day-number{font-size:12px}.calendar-day-markers{gap:2px}.status-dot{width:6px;height:6px}.calendar-day small{font-size:9px;padding:0 3px;right:2px;top:4px}.calendar-weekdays,.calendar-grid{gap:4px}.calendar-controls button{min-width:30px}.calendar-toolbar h2{font-size:18px}.calendar-day-head{flex-direction:column}.calendar-day-head input{max-width:100%}.delivery-editor .form-grid{grid-template-columns:1fr}.delivery-editor .span2{grid-column:1}}
+
+/* Sucursal La Paz: catálogo propio, alta manual y fotografías */
+.branch-own-editor{margin-bottom:20px}
+.branch-product-item{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.branch-product-detail{display:flex;gap:14px;align-items:center;flex:1 1 320px;min-width:0}
+.branch-product-detail>div:last-child{min-width:0}
+.branch-product-photo{width:88px;height:88px;flex:0 0 88px;object-fit:cover;border-radius:12px;background:#303a4a}
+.branch-no-photo{display:flex;align-items:center;justify-content:center;font-size:12px;color:#b8c4d6}
+.branch-item-actions{flex:0 0 auto}
+@media(max-width:640px){.branch-product-photo{width:66px;height:66px;flex-basis:66px}.branch-own-editor .panel-top{flex-wrap:wrap}}
