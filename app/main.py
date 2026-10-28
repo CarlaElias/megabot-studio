@@ -68,7 +68,9 @@ def money(v):
 def serial_product(p):
     return {'id':p.id,'sku':p.sku,'name':p.name,'category':p.category,'description':p.description,
             'sale_price':float(p.sale_price),'purchase_cost':float(p.purchase_cost),'stock':p.stock,
-            'active':p.active,'home_location':p.home_location,'photos':[{'id':ph.id,'url':f'/api/photos/{ph.id}'} for ph in p.photos]}
+            'active':p.active,'home_location':p.home_location,
+            'supplier_status':p.supplier_status,'supplier_stock':p.supplier_stock,
+            'photos':[{'id':ph.id,'url':f'/api/photos/{ph.id}'} for ph in p.photos]}
 
 def serial_sale(s):
     items=[{'product_id':l.product_id,'name':l.product_name,'quantity':l.quantity,'unit_price':float(l.unit_price),'unit_cost':float(l.unit_cost)} for l in s.lines]
@@ -317,6 +319,23 @@ async def edit_product(product_id:int,data:ProductInput,user=Depends(check_csrf)
     p.sale_price=money(data.sale_price);p.purchase_cost=money(data.purchase_cost)
     audit(db,user,'product.update',str(product_id));db.commit();await broadcast()
     return serial_product(p)
+
+class SupplierStatusInput(BaseModel):
+    status: Literal['disponible','agotado','sin_revisar']
+
+@app.post('/api/products/{product_id}/supplier-status')
+async def set_product_supplier_status(product_id:int,data:SupplierStatusInput,user=Depends(check_csrf),db:Session=Depends(get_db)):
+    """Disponibilidad de la importadora, independiente de las existencias físicas y ventas."""
+    p=db.get(Product,product_id)
+    if not p: raise HTTPException(404,'Producto no encontrado')
+    p.supplier_status=data.status
+    p.supplier_checked_at=datetime.utcnow()
+    if data.status=='agotado':
+        p.supplier_stock=0
+    audit(db,user,'supplier.status',f'{p.sku}: {data.status}')
+    db.commit()
+    await broadcast()
+    return {'id':p.id,'supplier_status':p.supplier_status,'supplier_stock':p.supplier_stock}
 
 @app.post('/api/products/{product_id}/archive')
 async def archive_product(product_id:int,user=Depends(check_csrf),db:Session=Depends(get_db)):
