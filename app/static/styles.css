@@ -122,3 +122,8 @@ input,textarea,select{background:color-mix(in srgb,var(--bg) 75%,var(--surface))
 .branch-no-photo{display:flex;align-items:center;justify-content:center;font-size:12px;color:#b8c4d6}
 .branch-item-actions{flex:0 0 auto}
 @media(max-width:640px){.branch-product-photo{width:66px;height:66px;flex-basis:66px}.branch-own-editor .panel-top{flex-wrap:wrap}}
+
+/* Estado del proveedor distinto de las existencias físicas. */
+.supplier-unavailable{margin:7px 0;padding:7px 9px;border-radius:8px;background:rgba(238,86,110,.12);border:1px solid rgba(238,86,110,.35);color:#ff91a4;font-size:12px;font-weight:750;line-height:1.4}
+.supplier-available{margin:7px 0;color:#81c6e6;font-size:12px;line-height:1.4}
+.supplier-toggle{font-size:11px}
