@@ -59,6 +59,9 @@ class Product(Base):
     purchase_cost: Mapped[Decimal] = mapped_column(Numeric(12,2), default=0)
     stock: Mapped[int] = mapped_column(Integer, default=0)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    supplier_status: Mapped[str] = mapped_column(String(24), default='sin_revisar', nullable=False)
+    supplier_stock: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    supplier_checked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     photos: Mapped[list['Photo']] = relationship(back_populates='product', cascade='all, delete-orphan')
 
