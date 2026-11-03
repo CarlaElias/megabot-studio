@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from decimal import Decimal
-from sqlalchemy import create_engine, Integer, String, Numeric, DateTime, ForeignKey, Text, Boolean
+from sqlalchemy import create_engine, Integer, String, Numeric, DateTime, ForeignKey, Text, Boolean, BigInteger
 from sqlalchemy.orm import DeclarativeBase, mapped_column, Mapped, relationship, sessionmaker
 from sqlalchemy.sql import func
 import os
@@ -62,6 +62,7 @@ class Product(Base):
     supplier_status: Mapped[str] = mapped_column(String(24), default='sin_revisar', nullable=False)
     supplier_stock: Mapped[int | None] = mapped_column(Integer, nullable=True)
     supplier_unit_price: Mapped[Decimal | None] = mapped_column(Numeric(12,2), nullable=True)
+    supplier_review_note: Mapped[str | None] = mapped_column(String(400), nullable=True)
     supplier_checked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     photos: Mapped[list['Photo']] = relationship(back_populates='product', cascade='all, delete-orphan')
@@ -159,6 +160,20 @@ class Audit(Base):
     action: Mapped[str] = mapped_column(String(120))
     detail: Mapped[str] = mapped_column(String(500), default='')
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class SupplierCatalogUpdate(Base):
+    """Historial privado del catálogo de la importadora, no altera inventario propio."""
+    __tablename__ = 'supplier_catalog_updates'
+    id: Mapped[int] = mapped_column(BigInteger().with_variant(Integer, 'sqlite'), primary_key=True, autoincrement=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey('products.id'), nullable=False)
+    old_supplier_stock: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    new_supplier_stock: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    old_supplier_unit_price: Mapped[Decimal | None] = mapped_column(Numeric(12,2), nullable=True)
+    new_supplier_unit_price: Mapped[Decimal | None] = mapped_column(Numeric(12,2), nullable=True)
+    source_label: Mapped[str] = mapped_column(String(160), nullable=False, default='Edición de importadora')
+    admin_id: Mapped[int | None] = mapped_column(ForeignKey('admins.id', ondelete='SET NULL'), nullable=True)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
 def init_db():
     Base.metadata.create_all(engine)
