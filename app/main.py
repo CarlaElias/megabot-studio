@@ -70,6 +70,8 @@ def serial_product(p):
             'sale_price':float(p.sale_price),'purchase_cost':float(p.purchase_cost),'stock':p.stock,
             'active':p.active,'home_location':p.home_location,
             'supplier_status':p.supplier_status,'supplier_stock':p.supplier_stock,
+            'supplier_unit_price':float(p.supplier_unit_price) if p.supplier_unit_price is not None else None,
+            'supplier_checked_at':p.supplier_checked_at.isoformat() if p.supplier_checked_at else None,
             'photos':[{'id':ph.id,'url':f'/api/photos/{ph.id}'} for ph in p.photos]}
 
 def serial_sale(s):
@@ -336,6 +338,27 @@ async def set_product_supplier_status(product_id:int,data:SupplierStatusInput,us
     db.commit()
     await broadcast()
     return {'id':p.id,'supplier_status':p.supplier_status,'supplier_stock':p.supplier_stock}
+
+class SupplierCatalogInput(BaseModel):
+    supplier_stock: int | None = Field(default=None, ge=0, le=1000000)
+    supplier_unit_price: Decimal | None = Field(default=None, ge=0, le=9999999999.99)
+    status: Literal['disponible','agotado','sin_revisar'] = 'disponible'
+
+@app.put('/api/products/{product_id}/supplier-catalog')
+async def update_supplier_catalog(product_id:int,data:SupplierCatalogInput,
+                                  user=Depends(check_csrf),db:Session=Depends(get_db)):
+    """Metadatos de la importadora: nunca modifican existencias, ventas ni costo de inventario."""
+    product=db.get(Product,product_id)
+    if not product:
+        raise HTTPException(404,'Producto no encontrado')
+    product.supplier_stock=0 if data.status=='agotado' else data.supplier_stock
+    product.supplier_unit_price=money(data.supplier_unit_price) if data.supplier_unit_price is not None else None
+    product.supplier_status=data.status
+    product.supplier_checked_at=now()
+    audit(db,user,'supplier.catalog',f'{product.sku}: proveedor={product.supplier_stock}; estado={data.status}')
+    db.commit()
+    await broadcast()
+    return serial_product(product)
 
 @app.post('/api/products/{product_id}/archive')
 async def archive_product(product_id:int,user=Depends(check_csrf),db:Session=Depends(get_db)):
