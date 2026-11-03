@@ -19,7 +19,7 @@ if DB_URL.startswith(('postgres://','postgresql://')):
     DB_URL = DB_URL.replace('postgres://', 'postgresql+psycopg://', 1).replace('postgresql://', 'postgresql+psycopg://', 1)
 if DB_URL.startswith('postgresql+psycopg://'):
     engine = create_engine(DB_URL, pool_pre_ping=True, pool_size=2, max_overflow=1,
-        connect_args={'options':'-csearch_path=megabot,public', 'sslmode':'require'})
+        connect_args={'options':'-csearch_path=public', 'sslmode':'require'})
 else:
     engine = create_engine(DB_URL, pool_pre_ping=True,
         connect_args={'check_same_thread': False, 'timeout': 30} if DB_URL.startswith('sqlite:') else {})
@@ -61,6 +61,7 @@ class Product(Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     supplier_status: Mapped[str] = mapped_column(String(24), default='sin_revisar', nullable=False)
     supplier_stock: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    supplier_unit_price: Mapped[Decimal | None] = mapped_column(Numeric(12,2), nullable=True)
     supplier_checked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     photos: Mapped[list['Photo']] = relationship(back_populates='product', cascade='all, delete-orphan')
