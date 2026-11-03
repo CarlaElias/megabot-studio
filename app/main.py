@@ -13,7 +13,7 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import Session, selectinload
 from PIL import Image, ImageOps, UnidentifiedImageError
 from .models import (ROOT,DATA,SessionLocal,init_db,now,Admin,LoginSession,Product,Photo,
-                     Sale,SaleLine,Delivery,Notification,GenerationJob,GeneratedImage,Audit,PushSubscription,PaymentRecord,WholesaleProfile,BranchStock,BranchTransfer)
+                     Sale,SaleLine,Delivery,Notification,GenerationJob,GeneratedImage,Audit,PushSubscription,PaymentRecord,WholesaleProfile,BranchStock,BranchTransfer,SupplierCatalogUpdate)
 from .security import (authenticated,check_csrf,resolve,hash_token,new_login,login_allowed,failed_login,verify_pass)
 from .worker import worker_loop,FILES
 from .excel_export import products_excel
@@ -71,6 +71,7 @@ def serial_product(p):
             'active':p.active,'home_location':p.home_location,
             'supplier_status':p.supplier_status,'supplier_stock':p.supplier_stock,
             'supplier_unit_price':float(p.supplier_unit_price) if p.supplier_unit_price is not None else None,
+            'supplier_review_note':p.supplier_review_note,
             'supplier_checked_at':p.supplier_checked_at.isoformat() if p.supplier_checked_at else None,
             'photos':[{'id':ph.id,'url':f'/api/photos/{ph.id}'} for ph in p.photos]}
 
@@ -325,15 +326,39 @@ async def edit_product(product_id:int,data:ProductInput,user=Depends(check_csrf)
 class SupplierStatusInput(BaseModel):
     status: Literal['disponible','agotado','sin_revisar']
 
+@app.get('/api/supplier/history')
+def supplier_catalog_history(user=Depends(authenticated),db:Session=Depends(get_db)):
+    """Auditoría de proveedor disponible únicamente a administradores autenticados."""
+    rows=db.execute(
+        select(SupplierCatalogUpdate,Product.name,Product.sku,Admin.display_name)
+        .join(Product,SupplierCatalogUpdate.product_id==Product.id)
+        .outerjoin(Admin,SupplierCatalogUpdate.admin_id==Admin.id)
+        .order_by(SupplierCatalogUpdate.id.desc()).limit(200)
+    ).all()
+    return [{
+        'id':h.id,'product_id':h.product_id,'product_name':name,'sku':sku,
+        'old_supplier_stock':h.old_supplier_stock,'new_supplier_stock':h.new_supplier_stock,
+        'old_supplier_unit_price':float(h.old_supplier_unit_price) if h.old_supplier_unit_price is not None else None,
+        'new_supplier_unit_price':float(h.new_supplier_unit_price) if h.new_supplier_unit_price is not None else None,
+        'source_label':h.source_label,'admin_name':admin_name,
+        'recorded_at':h.recorded_at.isoformat()
+    } for h,name,sku,admin_name in rows]
+
 @app.post('/api/products/{product_id}/supplier-status')
 async def set_product_supplier_status(product_id:int,data:SupplierStatusInput,user=Depends(check_csrf),db:Session=Depends(get_db)):
     """Disponibilidad de la importadora, independiente de las existencias físicas y ventas."""
     p=db.get(Product,product_id)
     if not p: raise HTTPException(404,'Producto no encontrado')
+    old_qty=p.supplier_stock
+    old_price=p.supplier_unit_price
     p.supplier_status=data.status
-    p.supplier_checked_at=datetime.utcnow()
+    p.supplier_checked_at=now()
     if data.status=='agotado':
         p.supplier_stock=0
+    db.add(SupplierCatalogUpdate(
+        product_id=p.id,old_supplier_stock=old_qty,new_supplier_stock=p.supplier_stock,
+        old_supplier_unit_price=old_price,new_supplier_unit_price=p.supplier_unit_price,
+        source_label='Cambio manual de estado de importadora',admin_id=user['id']))
     audit(db,user,'supplier.status',f'{p.sku}: {data.status}')
     db.commit()
     await broadcast()
@@ -351,10 +376,16 @@ async def update_supplier_catalog(product_id:int,data:SupplierCatalogInput,
     product=db.get(Product,product_id)
     if not product:
         raise HTTPException(404,'Producto no encontrado')
+    old_qty=product.supplier_stock
+    old_price=product.supplier_unit_price
     product.supplier_stock=0 if data.status=='agotado' else data.supplier_stock
     product.supplier_unit_price=money(data.supplier_unit_price) if data.supplier_unit_price is not None else None
     product.supplier_status=data.status
     product.supplier_checked_at=now()
+    db.add(SupplierCatalogUpdate(
+        product_id=product.id,old_supplier_stock=old_qty,new_supplier_stock=product.supplier_stock,
+        old_supplier_unit_price=old_price,new_supplier_unit_price=product.supplier_unit_price,
+        source_label='Edición manual del catálogo',admin_id=user['id']))
     audit(db,user,'supplier.catalog',f'{product.sku}: proveedor={product.supplier_stock}; estado={data.status}')
     db.commit()
     await broadcast()
