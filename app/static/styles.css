@@ -127,3 +127,20 @@ input,textarea,select{background:color-mix(in srgb,var(--bg) 75%,var(--surface))
 .supplier-unavailable{margin:7px 0;padding:7px 9px;border-radius:8px;background:rgba(238,86,110,.12);border:1px solid rgba(238,86,110,.35);color:#ff91a4;font-size:12px;font-weight:750;line-height:1.4}
 .supplier-available{margin:7px 0;color:#81c6e6;font-size:12px;line-height:1.4}
 .supplier-toggle{font-size:11px}
+
+/* Catálogo de importadora separado de inventario físico: lectura sencilla también en celular */
+.supplier-toolbar{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.supplier-toolbar input{flex:2 1 240px;min-width:0}
+.supplier-toolbar select{flex:1 1 210px;min-width:0}
+.supplier-list-item{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.supplier-row{display:flex;align-items:center;gap:14px;flex:1 1 290px;min-width:0}
+.supplier-row-body{min-width:0;overflow-wrap:anywhere}
+.supplier-row-body small{display:block;margin:6px 0}
+.supplier-photo{width:76px;height:76px;flex:0 0 76px;border-radius:12px;object-fit:cover;background:#303a4a}
+.supplier-no-photo{display:flex;align-items:center;justify-content:center;color:#a9bad0;font-size:11px;text-align:center}
+#supplierEditor{scroll-margin-top:30px}
+@media(max-width:600px){
+ .supplier-photo{width:60px;height:60px;flex-basis:60px}
+ .supplier-list-item>[data-supplier-edit]{margin-left:74px}
+ .supplier-toolbar input,.supplier-toolbar select{flex-basis:100%}
+}
