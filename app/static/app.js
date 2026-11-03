@@ -3,7 +3,7 @@ const $ = s=>document.querySelector(s);
 const $$ = s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const bs=v=>'Bs '+Number(v||0).toFixed(2);
-const st={me:null,products:[],wholesale:[],sales:[],deliveries:[],jobs:[],notices:[],audit:[],page:'dashboard',selectedJob:null,galleryImages:[],lastNotification:null,ws:null,branchStocks:{},branchTransfers:[]};
+const st={me:null,products:[],wholesale:[],sales:[],deliveries:[],jobs:[],notices:[],audit:[],page:'dashboard',selectedJob:null,galleryImages:[],lastNotification:null,ws:null,branchStocks:{},branchTransfers:[],supplierHistory:[]};
 function csrf(){return decodeURIComponent((document.cookie.match(/(?:^|; )megabot_csrf=([^;]+)/)||[])[1]||'')}
 async function api(path,opts={}){
  const method=opts.method||'GET';const headers=opts.headers||{};
@@ -28,15 +28,15 @@ async function refresh(){
 async function refreshOnce(){
  if(!st.me)return;
  try{
-  const paths=['/products','/wholesale','/sales','/deliveries','/jobs','/notifications','/dashboard'];
+  const paths=['/products','/wholesale','/sales','/deliveries','/jobs','/notifications','/dashboard','/supplier/history'];
   const responses=[];
   for(let i=0;i<paths.length;i+=2){
    const group=await Promise.all(paths.slice(i,i+2).map(path=>api(path)));
    responses.push(...group);
   }
-  const [products,wholesale,sales,deliveries,jobs,notices,dashboard]=responses;
+  const [products,wholesale,sales,deliveries,jobs,notices,dashboard,supplierHistory]=responses;
   const location=await api('/branches/lapaz');st.branchStocks=location.stocks||{};st.branchTransfers=location.transfers||[];
-  let old=st.lastNotification;st.products=products;st.wholesale=wholesale;st.sales=sales;st.deliveries=deliveries;st.jobs=jobs;st.notices=notices;st.dashboard=dashboard;
+  let old=st.lastNotification;st.products=products;st.wholesale=wholesale;st.sales=sales;st.deliveries=deliveries;st.jobs=jobs;st.notices=notices;st.dashboard=dashboard;st.supplierHistory=supplierHistory;
   const newest=notices[0]?.id||0;
   if(old!==null&&newest>old&&notices[0]){
    toast(notices[0].message);
@@ -47,7 +47,7 @@ async function refreshOnce(){
  }catch(e){console.error(e);$('#conn').textContent='● Sincronización pendiente'}
 }
 function navigate(page){st.page=page;$$('.page').forEach(e=>e.classList.toggle('hidden',e.id!=='page-'+page));$$('.nav').forEach(e=>e.classList.toggle('active',e.dataset.page===page));let txt=$(`.nav[data-page="${page}"] span`);$('#crumb').textContent=txt?.textContent||'Panel principal';$('.sidebar').classList.remove('open');render()}
-function render(){if(!st.me)return; renderMetrics();renderProducts();renderSupplier();renderInventory();renderBranches();renderSales();renderDeliveries();renderJobs();renderOptions();renderNotifications();renderAudit();}
+function render(){if(!st.me)return; renderMetrics();renderProducts();renderSupplier();renderSupplierHistory();renderInventory();renderBranches();renderSales();renderDeliveries();renderJobs();renderOptions();renderNotifications();renderAudit();}
 function renderMetrics(){let x=st.dashboard||{};let metrics=[['▤','Productos activos',x.products||0],['◆','Ventas confirmadas',bs(x.sales_total)],['✧','Ganancia estimada',bs(x.profit_total)],['◈','Imágenes terminadas',x.images||0],['▣','Unidades disponibles',st.products.reduce((acc,p)=>acc+Number(p.stock||0)+Number(st.branchStocks[p.id]||0),0)],['◉','Capital en stock',bs(st.products.reduce((acc,p)=>acc+(Number(p.stock||0)+Number(st.branchStocks[p.id]||0))*Number(p.purchase_cost||0),0))],['◷','Saldo por cobrar',bs(x.pending_balance)],['✦','Lotes en progreso',x.jobs_running||0]];
  $('#metrics').innerHTML=metrics.map(a=>`<div class="metric"><div class="icon">${a[0]}</div><strong>${esc(a[2])}</strong><span>${esc(a[1])}</span></div>`).join('');
  $('#homeSales').innerHTML=st.sales.slice(0,4).map(s=>`<div class="list-item"><div><strong>Venta #${s.id} · ${esc(s.client)}</strong><small>${esc(s.created_at.slice(0,16).replace('T',' '))}</small></div><strong>${bs(s.total)}</strong></div>`).join('')||'<p>Sin ventas registradas.</p>';
@@ -71,6 +71,7 @@ function renderSupplier(){
    if(filter==='captured')return p.supplier_stock!==null && p.supplier_stock!==undefined;
    if(filter==='agotado')return p.supplier_status==='agotado';
    if(filter==='pending')return p.supplier_stock===null || p.supplier_stock===undefined;
+   if(filter==='review')return Boolean(p.supplier_review_note);
    return true;
  }).sort((a,b)=>a.id-b.id);
  root.innerHTML=selected.map(p=>{
@@ -84,10 +85,30 @@ function renderSupplier(){
    return '<div class="list-item supplier-list-item"><div class="supplier-row">'+photo+
      '<div class="supplier-row-body"><strong>'+esc(p.name)+'</strong><small>'+esc(p.sku)+' · '+esc(p.category)+'</small>'+
      '<small>Importadora: <b>'+qty+'</b> · Precio por unidad: <b>'+price+'</b></small>'+
-     '<small>Stock propio: Tienda '+ownStore+' · La Paz '+ownPaz+' · Total '+(ownStore+ownPaz)+'</small>'+
+     '<div class="supplier-tags"><span class="supplier-tag">Importadora</span><span class="supplier-tag">Tienda: '+ownStore+'</span><span class="supplier-tag">La Paz: '+ownPaz+'</span></div>'+
+     '<small>Stock propio total: '+(ownStore+ownPaz)+' unidades</small>'+
+     (p.supplier_review_note?'<div class="supplier-review-note">⚠ '+esc(p.supplier_review_note)+'</div>':'')+
      '<div>'+state+'</div></div></div>'+
      '<button type="button" class="mini" data-supplier-edit="'+p.id+'">Editar proveedor</button></div>';
  }).join('')||'<p class="dim">No se encontraron productos con esos filtros.</p>';
+}
+
+
+function renderSupplierHistory(){
+ const target=$('#supplierHistoryList');if(!target)return;
+ const query=($('#supplierHistorySearch').value||'').trim().toLowerCase();
+ const all=st.supplierHistory||[];
+ const result=all.filter(h=>((h.sku||'')+' '+(h.product_name||'')+' '+(h.source_label||'')).toLowerCase().includes(query)).slice(0,100);
+ $('#supplierHistorySummary').textContent=all.length+' movimientos recientes registrados · mostrando '+result.length+'. Los registros anteriores permanecen en la base de datos.';
+ const quantity=v=>v===null||v===undefined?'Sin dato':String(v)+' ud.';
+ const currency=v=>v===null||v===undefined?'Sin dato':bs(v);
+ target.innerHTML=result.map(h=>{
+  const timestamp=new Date(h.recorded_at).toLocaleString('es-BO',{dateStyle:'short',timeStyle:'short'});
+  return '<div class="list-item supplier-history-item"><div><strong>'+esc(h.product_name)+'</strong><small>'+esc(h.sku)+' · '+esc(timestamp)+'</small>'+
+   '<small>Unidades proveedor: '+esc(quantity(h.old_supplier_stock))+' → '+esc(quantity(h.new_supplier_stock))+'</small>'+
+   '<small>Precio proveedor: '+esc(currency(h.old_supplier_unit_price))+' → '+esc(currency(h.new_supplier_unit_price))+'</small>'+
+   '<small>'+esc(h.source_label||'Actualización')+(h.admin_name?' · '+esc(h.admin_name):'')+'</small></div></div>';
+ }).join('')||'<p class="dim">No hay movimientos que coincidan con la búsqueda.</p>';
 }
 
 function renderInventory(){
@@ -299,6 +320,7 @@ on('#searchProducts','input',renderProducts);
 
 on('#supplierSearch','input',renderSupplier);
 on('#supplierFilter','change',renderSupplier);
+on('#supplierHistorySearch','input',renderSupplierHistory);
 on('#supplierCancel','click',()=>$('#supplierEditor').classList.add('hidden'));
 on('#supplierList','click',e=>{
  const btn=e.target.closest('[data-supplier-edit]');if(!btn)return;
