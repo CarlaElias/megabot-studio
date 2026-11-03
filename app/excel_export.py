@@ -34,7 +34,7 @@ def products_excel(products, branch_stock=None):
     branch_stock=branch_stock or {}
     headers = ['SKU', 'Producto', 'Categoría', 'Descripción', 'Precio venta (Bs)',
                'Costo compra (Bs)', 'Tienda stock', 'La Paz stock', 'Stock total', 'Estado', 'Valor total en stock (Bs)', 'Margen unitario (Bs)',
-               'Estado importadora','Unidades importadora','Precio importadora por unidad (Bs)','Última consulta importadora']
+               'Estado importadora','Unidades importadora','Precio importadora por unidad (Bs)','Última consulta importadora','Observación proveedor']
     table_rows = []
     for p in products:
         table_rows.append([p.sku, p.name, p.category, p.description,
@@ -44,7 +44,8 @@ def products_excel(products, branch_stock=None):
                            p.sale_price - p.purchase_cost,
                            p.supplier_status or 'sin_revisar',p.supplier_stock if p.supplier_stock is not None else '',
                            p.supplier_unit_price if p.supplier_unit_price is not None else '',
-                           p.supplier_checked_at.strftime('%Y-%m-%d') if p.supplier_checked_at else ''])
+                           p.supplier_checked_at.strftime('%Y-%m-%d') if p.supplier_checked_at else '',
+                           p.supplier_review_note or ''])
     grid = []
     grid.append('<row r="1" ht="34" customHeight="1">' + cell(1, 1, 'MEGABOT INTEGRAL · INVENTARIO', 1) + '</row>')
     timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
@@ -59,8 +60,9 @@ def products_excel(products, branch_stock=None):
           f'<cols><col min="1" max="1" width="17" customWidth="1"/><col min="2" max="2" width="34" customWidth="1"/>'
           f'<col min="3" max="3" width="20" customWidth="1"/><col min="4" max="4" width="46" customWidth="1"/>'
           f'<col min="5" max="12" width="19" customWidth="1"/>'
-          f'<col min="13" max="16" width="24" customWidth="1"/></cols>'
-          f'<sheetData>{"".join(grid)}</sheetData><autoFilter ref="A4:P{last}"/></worksheet>')
+          f'<col min="13" max="16" width="24" customWidth="1"/>'
+          f'<col min="17" max="17" width="52" customWidth="1"/></cols>'
+          f'<sheetData>{"".join(grid)}</sheetData><autoFilter ref="A4:Q{last}"/></worksheet>')
     styles = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0.00 &quot;Bs&quot;"/></numFmts>
