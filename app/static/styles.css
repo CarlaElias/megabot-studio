@@ -144,3 +144,14 @@ input,textarea,select{background:color-mix(in srgb,var(--bg) 75%,var(--surface))
  .supplier-list-item>[data-supplier-edit]{margin-left:74px}
  .supplier-toolbar input,.supplier-toolbar select{flex-basis:100%}
 }
+
+/* Importadora: identificadores de ubicación y revisión de publicaciones */
+.supplier-tags{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.supplier-tag{font-size:11px;line-height:1.2;border:1px solid #536177;color:#d4dfec;border-radius:6px;padding:4px 7px;background:rgba(140,161,194,.08)}
+.supplier-tag:first-child{border-color:rgba(245,187,88,.45);color:#f7c36e}
+.supplier-review-note{margin:8px 0;padding:8px 10px;border:1px solid rgba(250,175,55,.36);border-radius:10px;background:rgba(245,185,72,.10);color:#fbd28f;font-size:12px;line-height:1.5}
+.supplier-history-panel{margin-top:20px}
+.supplier-history-panel .panel-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.supplier-history-panel .panel-top input{min-width:180px;max-width:320px;flex:1 1 210px}
+.supplier-history-item{padding:13px 16px;line-height:1.45}
+.supplier-history-item small{display:block;margin-top:4px}
