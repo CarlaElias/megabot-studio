@@ -106,3 +106,47 @@ def test_integrated_flow():
         assert c.get('/api/products').json()[0]['stock']==4
         assert c.post('/api/logout',headers=headers).status_code==200
         assert c.get(photo['url']).status_code==401
+
+
+def test_supplier_alert_routes_and_csrf():
+    """La bandeja es privada, revisable y no afecta las existencias ni el precio de venta."""
+    from app.models import Product, SupplierAlert
+    from sqlalchemy import select
+    init_db()
+    with SessionLocal() as db:
+        product=db.scalar(select(Product).where(Product.name=='Aceitero de vidrio'))
+        assert product is not None, 'Requiere prueba integrada ejecutada antes'
+        original_stock=product.stock
+        original_sale_price=product.sale_price
+        alert=SupplierAlert(
+            product_id=product.id,kind='precio_subio',
+            old_supplier_stock=8,new_supplier_stock=8,
+            old_supplier_unit_price=15,new_supplier_unit_price=20,
+            source_label='Prueba controlada')
+        db.add(alert)
+        db.commit()
+        aid=alert.id
+    with TestClient(app) as c:
+        assert c.get('/api/supplier/alerts').status_code==401
+        login=c.post('/api/login',json={'username':'admin1','password':'LongPasswordTest1!'})
+        assert login.status_code==200,login.text
+        csrf=login.json()['csrf']
+        feed=c.get('/api/supplier/alerts')
+        assert feed.status_code==200,feed.text
+        assert feed.json()['pending_count']>=1
+        found=next((x for x in feed.json()['items'] if x['id']==aid),None)
+        assert found and found['kind']=='precio_subio'
+        assert found['old_supplier_unit_price']==15.0
+        assert found['new_supplier_unit_price']==20.0
+        uri=f'/api/supplier/alerts/{aid}/review'
+        assert c.post(uri,json={'reviewed':True}).status_code==403
+        changed=c.post(uri,json={'reviewed':True},headers={'X-CSRF-Token':csrf})
+        assert changed.status_code==200,changed.text
+        assert changed.json()['reviewed'] is True
+        assert c.get('/api/supplier/alerts').json()['pending_count']>=0
+        undone=c.post(uri,json={'reviewed':False},headers={'X-CSRF-Token':csrf})
+        assert undone.status_code==200 and undone.json()['reviewed'] is False
+    with SessionLocal() as db:
+        current=db.get(Product,product.id)
+        assert current.stock==original_stock
+        assert current.sale_price==original_sale_price
