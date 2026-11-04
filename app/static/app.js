@@ -3,7 +3,7 @@ const $ = s=>document.querySelector(s);
 const $$ = s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const bs=v=>'Bs '+Number(v||0).toFixed(2);
-const st={me:null,products:[],wholesale:[],sales:[],deliveries:[],jobs:[],notices:[],audit:[],page:'dashboard',selectedJob:null,galleryImages:[],lastNotification:null,ws:null,branchStocks:{},branchTransfers:[],supplierHistory:[]};
+const st={me:null,products:[],wholesale:[],sales:[],deliveries:[],jobs:[],notices:[],audit:[],page:'dashboard',selectedJob:null,galleryImages:[],lastNotification:null,ws:null,branchStocks:{},branchTransfers:[],supplierHistory:[],supplierAlerts:[],supplierAlertCount:null};
 function csrf(){return decodeURIComponent((document.cookie.match(/(?:^|; )megabot_csrf=([^;]+)/)||[])[1]||'')}
 async function api(path,opts={}){
  const method=opts.method||'GET';const headers=opts.headers||{};
@@ -28,15 +28,25 @@ async function refresh(){
 async function refreshOnce(){
  if(!st.me)return;
  try{
-  const paths=['/products','/wholesale','/sales','/deliveries','/jobs','/notifications','/dashboard','/supplier/history'];
+  const paths=['/products','/wholesale','/sales','/deliveries','/jobs','/notifications','/dashboard','/supplier/history','/supplier/alerts'];
   const responses=[];
   for(let i=0;i<paths.length;i+=2){
    const group=await Promise.all(paths.slice(i,i+2).map(path=>api(path)));
    responses.push(...group);
   }
-  const [products,wholesale,sales,deliveries,jobs,notices,dashboard,supplierHistory]=responses;
+  const [products,wholesale,sales,deliveries,jobs,notices,dashboard,supplierHistory,supplierAlertFeed]=responses;
   const location=await api('/branches/lapaz');st.branchStocks=location.stocks||{};st.branchTransfers=location.transfers||[];
+  const oldSupplierCount=st.supplierAlertCount;
   let old=st.lastNotification;st.products=products;st.wholesale=wholesale;st.sales=sales;st.deliveries=deliveries;st.jobs=jobs;st.notices=notices;st.dashboard=dashboard;st.supplierHistory=supplierHistory;
+  st.supplierAlerts=supplierAlertFeed.items||[];
+  st.supplierAlertCount=Number(supplierAlertFeed.pending_count||0);
+  if(oldSupplierCount!==null && st.supplierAlertCount>oldSupplierCount){
+   const delta=st.supplierAlertCount-oldSupplierCount;
+   toast(delta+' novedad(es) de importadora. Revisa tus publicaciones en Facebook.');
+   if(window.Notification&&Notification.permission==='granted'){
+    new Notification('MegaBot · Alertas importadora',{body:delta+' cambios nuevos por revisar en tus productos.'});
+   }
+  }
   const newest=notices[0]?.id||0;
   if(old!==null&&newest>old&&notices[0]){
    toast(notices[0].message);
@@ -47,7 +57,7 @@ async function refreshOnce(){
  }catch(e){console.error(e);$('#conn').textContent='● Sincronización pendiente'}
 }
 function navigate(page){st.page=page;$$('.page').forEach(e=>e.classList.toggle('hidden',e.id!=='page-'+page));$$('.nav').forEach(e=>e.classList.toggle('active',e.dataset.page===page));let txt=$(`.nav[data-page="${page}"] span`);$('#crumb').textContent=txt?.textContent||'Panel principal';$('.sidebar').classList.remove('open');render()}
-function render(){if(!st.me)return; renderMetrics();renderProducts();renderSupplier();renderSupplierHistory();renderInventory();renderBranches();renderSales();renderDeliveries();renderJobs();renderOptions();renderNotifications();renderAudit();}
+function render(){if(!st.me)return; renderMetrics();renderProducts();renderSupplier();renderSupplierAlerts();renderSupplierHistory();renderInventory();renderBranches();renderSales();renderDeliveries();renderJobs();renderOptions();renderNotifications();renderAudit();}
 function renderMetrics(){let x=st.dashboard||{};let metrics=[['▤','Productos activos',x.products||0],['◆','Ventas confirmadas',bs(x.sales_total)],['✧','Ganancia estimada',bs(x.profit_total)],['◈','Imágenes terminadas',x.images||0],['▣','Unidades disponibles',st.products.reduce((acc,p)=>acc+Number(p.stock||0)+Number(st.branchStocks[p.id]||0),0)],['◉','Capital en stock',bs(st.products.reduce((acc,p)=>acc+(Number(p.stock||0)+Number(st.branchStocks[p.id]||0))*Number(p.purchase_cost||0),0))],['◷','Saldo por cobrar',bs(x.pending_balance)],['✦','Lotes en progreso',x.jobs_running||0]];
  $('#metrics').innerHTML=metrics.map(a=>`<div class="metric"><div class="icon">${a[0]}</div><strong>${esc(a[2])}</strong><span>${esc(a[1])}</span></div>`).join('');
  $('#homeSales').innerHTML=st.sales.slice(0,4).map(s=>`<div class="list-item"><div><strong>Venta #${s.id} · ${esc(s.client)}</strong><small>${esc(s.created_at.slice(0,16).replace('T',' '))}</small></div><strong>${bs(s.total)}</strong></div>`).join('')||'<p>Sin ventas registradas.</p>';
@@ -93,6 +103,79 @@ function renderSupplier(){
  }).join('')||'<p class="dim">No se encontraron productos con esos filtros.</p>';
 }
 
+
+
+const SUPPLIER_ALERT_TYPES={
+ nuevo:{name:'Nuevo en importadora',icon:'✦',tone:'new',action:'Revisa si ya publicaste este producto en Facebook. Si decides venderlo, prepara foto y precio de venta antes de publicarlo.'},
+ agotado:{name:'Agotado en importadora',icon:'●',tone:'out',action:'Revisa tu anuncio en Facebook Marketplace y actualiza o pausa la publicación si dependes del proveedor. Si tienes stock propio puedes seguir vendiendo esas unidades.'},
+ repuesto:{name:'Volvió a estar disponible',icon:'↻',tone:'restocked',action:'Comprueba la reposición del proveedor y considera reactivar el anuncio. Verifica existencias reales antes de ofrecer entrega inmediata.'},
+ precio_subio:{name:'Subió el precio proveedor',icon:'↑',tone:'priceup',action:'Revisa tu margen de ganancia y el precio anunciado en Facebook. MegaBot no cambia automáticamente tu precio de venta.'},
+ precio_bajo:{name:'Bajó el precio proveedor',icon:'↓',tone:'pricedown',action:'Puedes valorar una promoción o mejorar el margen. Confirma el nuevo precio con la importadora antes de cambiar Facebook.'}
+};
+
+function renderSupplierAlerts(){
+ const area=$('#supplierAlertsList');if(!area)return;
+ const all=st.supplierAlerts||[];
+ const pending=Number(st.supplierAlertCount||0);
+ const bubble=$('#supplierAlertNavCount');
+ if(bubble){
+  bubble.textContent=pending>99?'99+':String(pending);
+  bubble.classList.toggle('hidden',pending===0);
+ }
+ const open=all.filter(a=>!a.reviewed_at);
+ const stats=[
+  ['Pendientes',pending,'pending'],
+  ['Productos nuevos',open.filter(a=>a.kind==='nuevo').length,'new'],
+  ['Agotados',open.filter(a=>a.kind==='agotado').length,'out'],
+  ['Precios subieron',open.filter(a=>a.kind==='precio_subio').length,'priceup'],
+  ['Precios bajaron',open.filter(a=>a.kind==='precio_bajo').length,'pricedown'],
+  ['Reposiciones',open.filter(a=>a.kind==='repuesto').length,'restocked']
+ ];
+ $('#supplierAlertMetrics').innerHTML=stats.map(([label,n,tone])=>
+  '<div class="supplier-alert-stat '+tone+'"><strong>'+n+'</strong><small>'+esc(label)+'</small></div>'
+ ).join('');
+ const state=$('#supplierAlertStatusFilter').value;
+ const kind=$('#supplierAlertTypeFilter').value;
+ const query=($('#supplierAlertSearch').value||'').toLowerCase().trim();
+ const matches=all.filter(a=>{
+  if(state==='pending'&&a.reviewed_at)return false;
+  if(state==='reviewed'&&!a.reviewed_at)return false;
+  if(kind!=='all'&&a.kind!==kind)return false;
+  if(query && !(a.product_name+' '+a.sku).toLowerCase().includes(query))return false;
+  return true;
+ });
+ $('#supplierAlertResultsLabel').textContent=matches.length+' alerta(s) mostradas · '+pending+' pendiente(s) por gestionar en Facebook.';
+ const showQty=v=>v==null?'sin dato':v+' ud.';
+ const showMoney=v=>v==null?'sin dato':bs(v);
+ area.innerHTML=matches.map(a=>{
+  const type=SUPPLIER_ALERT_TYPES[a.kind]||{name:'Cambio proveedor',icon:'◈',tone:'',action:'Revisa el producto y tu publicación.'};
+  const prod=st.products.find(p=>p.id===a.product_id);
+  const photo=prod?.photos?.length?'<img class="supplier-alert-photo" loading="lazy" alt="Producto" src="'+esc(prod.photos[0].url)+'">':'<div class="supplier-alert-photo supplier-alert-photo-empty">Sin foto</div>';
+  const ownStore=Number(prod?.stock||0);
+  const ownPaz=Number(st.branchStocks[a.product_id]||0);
+  const time=new Date(a.created_at);
+  const when=Number.isNaN(time.getTime())?'Fecha pendiente':time.toLocaleString('es-BO',{dateStyle:'short',timeStyle:'short'});
+  const showPrice=(a.kind==='precio_subio'||a.kind==='precio_bajo')?
+   '<div class="supplier-alert-delta">Precio proveedor: '+esc(showMoney(a.old_supplier_unit_price))+' → <strong>'+esc(showMoney(a.new_supplier_unit_price))+'</strong>'+
+   (Number(a.old_supplier_unit_price)>0?' ('+((Number(a.new_supplier_unit_price)/Number(a.old_supplier_unit_price)-1)*100).toFixed(1)+'%)':'')+'</div>':
+   '<div class="supplier-alert-delta">Importadora: '+esc(showQty(a.old_supplier_stock))+' → <strong>'+esc(showQty(a.new_supplier_stock))+'</strong> · Precio: '+esc(showMoney(a.new_supplier_unit_price))+'</div>';
+  return '<article class="supplier-alert-card '+type.tone+(a.reviewed_at?' reviewed':'')+'">'+
+    photo+'<div class="supplier-alert-main">'+
+    '<div class="supplier-alert-heading"><span class="supplier-alert-kind">'+type.icon+' '+esc(type.name)+'</span>'+
+    '<small>'+esc(when)+'</small></div>'+
+    '<strong class="supplier-alert-product">'+esc(a.product_name)+'</strong>'+
+    '<small class="supplier-alert-sku">'+esc(a.sku)+'</small>'+
+    showPrice+
+    '<p class="supplier-alert-advice">'+esc(type.action)+'</p>'+
+    '<small class="supplier-alert-ownstock">Existencias propias: Tienda '+ownStore+' · La Paz '+ownPaz+' (no son las unidades de la importadora)</small>'+
+    '<div class="supplier-alert-actions">'+
+      '<button type="button" class="mini" data-supplier-alert-catalog="'+a.id+'">Ver producto</button>'+
+      '<button type="button" class="mini" data-supplier-alert-copy="'+a.id+'">Copiar recordatorio</button>'+
+      '<button type="button" class="mini '+(a.reviewed_at?'':'supplier-alert-done')+'" data-supplier-alert-review="'+a.id+'">'+
+       (a.reviewed_at?'Volver a pendiente':'✓ Marcar revisada')+'</button>'+
+    '</div></div></article>';
+ }).join('')||'<p class="dim">No tienes alertas con este filtro. ¡Tus publicaciones están al día con los cambios registrados!</p>';
+}
 
 function renderSupplierHistory(){
  const target=$('#supplierHistoryList');if(!target)return;
@@ -321,6 +404,42 @@ on('#searchProducts','input',renderProducts);
 on('#supplierSearch','input',renderSupplier);
 on('#supplierFilter','change',renderSupplier);
 on('#supplierHistorySearch','input',renderSupplierHistory);
+
+['#supplierAlertStatusFilter','#supplierAlertTypeFilter'].forEach(sel=>on(sel,'change',renderSupplierAlerts));
+on('#supplierAlertSearch','input',renderSupplierAlerts);
+on('#supplierAlertRefresh','click',async()=>{await refresh();toast('Alertas consultadas desde MegaBot')});
+on('#supplierAlertsList','click',async e=>{
+ const btn=e.target.closest('button');if(!btn)return;
+ const rawId=btn.dataset.supplierAlertReview||btn.dataset.supplierAlertCopy||btn.dataset.supplierAlertCatalog;
+ const a=st.supplierAlerts.find(x=>x.id===Number(rawId));if(!a)return;
+ if(btn.dataset.supplierAlertCatalog){
+  navigate('supplier');$('#supplierSearch').value=a.sku;renderSupplier();return;
+ }
+ if(btn.dataset.supplierAlertCopy){
+  const type=SUPPLIER_ALERT_TYPES[a.kind]||{name:'Cambio en importadora',action:'Revisar publicación en Facebook'};
+  const message='MEGACOMPRA · Revisar publicación de Facebook\\n'+a.product_name+' ('+a.sku+')\\n'+
+   type.name+'\\nAntes: '+(a.old_supplier_unit_price==null?'sin precio':bs(a.old_supplier_unit_price))+
+   ' · Ahora: '+(a.new_supplier_unit_price==null?'sin precio':bs(a.new_supplier_unit_price))+'\\n'+type.action;
+  try{
+   if(!navigator.clipboard?.writeText)throw Error('Copiar no disponible');
+   await navigator.clipboard.writeText(message);
+   toast('Recordatorio copiado para gestionar tu publicación');
+  }catch{toast('No se pudo copiar. Puedes revisar los datos de la tarjeta.',true)}
+  return;
+ }
+ if(btn.dataset.supplierAlertReview){
+  if(btn.disabled)return;btn.disabled=true;
+  try{
+   const reviewed=!a.reviewed_at;
+   const result=await api('/supplier/alerts/'+a.id+'/review',{method:'POST',body:JSON.stringify({reviewed})});
+   a.reviewed_at=result.reviewed_at;
+   st.supplierAlertCount=Math.max(0,Number(st.supplierAlertCount||0)+(reviewed?-1:1));
+   renderSupplierAlerts();
+   toast(reviewed?'Alerta marcada como revisada':'Alerta restaurada a pendientes');
+  }catch(err){toast(err.message,true);btn.disabled=false}
+ }
+});
+
 on('#supplierCancel','click',()=>$('#supplierEditor').classList.add('hidden'));
 on('#supplierList','click',e=>{
  const btn=e.target.closest('[data-supplier-edit]');if(!btn)return;
