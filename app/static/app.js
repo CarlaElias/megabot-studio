@@ -168,6 +168,7 @@ function renderSupplierAlerts(){
     showPrice+
     '<p class="supplier-alert-advice">'+esc(type.action)+'</p>'+
     '<small class="supplier-alert-ownstock">Existencias propias: Tienda '+ownStore+' · La Paz '+ownPaz+' (no son las unidades de la importadora)</small>'+
+    (prod?'<small class="supplier-alert-ownstock">Precio público actual: '+bs(prod.sale_price)+' · Costo real de compra propio: '+bs(prod.purchase_cost)+'</small>':'')+
     '<div class="supplier-alert-actions">'+
       '<button type="button" class="mini" data-supplier-alert-catalog="'+a.id+'">Ver producto</button>'+
       '<button type="button" class="mini" data-supplier-alert-copy="'+a.id+'">Copiar recordatorio</button>'+
@@ -417,9 +418,16 @@ on('#supplierAlertsList','click',async e=>{
  }
  if(btn.dataset.supplierAlertCopy){
   const type=SUPPLIER_ALERT_TYPES[a.kind]||{name:'Cambio en importadora',action:'Revisar publicación en Facebook'};
-  const message='MEGACOMPRA · Revisar publicación de Facebook\\n'+a.product_name+' ('+a.sku+')\\n'+
-   type.name+'\\nAntes: '+(a.old_supplier_unit_price==null?'sin precio':bs(a.old_supplier_unit_price))+
-   ' · Ahora: '+(a.new_supplier_unit_price==null?'sin precio':bs(a.new_supplier_unit_price))+'\\n'+type.action;
+  const message=[
+   'MEGACOMPRA · Revisar publicación de Facebook',
+   a.product_name+' ('+a.sku+')',
+   type.name,
+   'Cantidad antes: '+(a.old_supplier_stock==null?'sin dato':a.old_supplier_stock),
+   'Cantidad ahora: '+(a.new_supplier_stock==null?'sin dato':a.new_supplier_stock),
+   'Precio proveedor antes: '+(a.old_supplier_unit_price==null?'sin dato':bs(a.old_supplier_unit_price)),
+   'Precio proveedor ahora: '+(a.new_supplier_unit_price==null?'sin dato':bs(a.new_supplier_unit_price)),
+   type.action
+  ].join(String.fromCharCode(10));
   try{
    if(!navigator.clipboard?.writeText)throw Error('Copiar no disponible');
    await navigator.clipboard.writeText(message);
