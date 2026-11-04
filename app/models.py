@@ -175,6 +175,21 @@ class SupplierCatalogUpdate(Base):
     admin_id: Mapped[int | None] = mapped_column(ForeignKey('admins.id', ondelete='SET NULL'), nullable=True)
     recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
+class SupplierAlert(Base):
+    """Alerta privada de cambios del proveedor; NO modifica existencias de las tiendas."""
+    __tablename__ = 'supplier_alerts'
+    id: Mapped[int] = mapped_column(BigInteger().with_variant(Integer, 'sqlite'), primary_key=True, autoincrement=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey('products.id', ondelete='RESTRICT'), nullable=False)
+    kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    old_supplier_stock: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    new_supplier_stock: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    old_supplier_unit_price: Mapped[Decimal | None] = mapped_column(Numeric(12,2), nullable=True)
+    new_supplier_unit_price: Mapped[Decimal | None] = mapped_column(Numeric(12,2), nullable=True)
+    source_label: Mapped[str] = mapped_column(String(160), default='Cambio detectado en catálogo importadora', nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_by: Mapped[int | None] = mapped_column(ForeignKey('admins.id', ondelete='SET NULL'), nullable=True)
+
 def init_db():
     Base.metadata.create_all(engine)
 
