@@ -155,3 +155,54 @@ input,textarea,select{background:color-mix(in srgb,var(--bg) 75%,var(--surface))
 .supplier-history-panel .panel-top input{min-width:180px;max-width:320px;flex:1 1 210px}
 .supplier-history-item{padding:13px 16px;line-height:1.45}
 .supplier-history-item small{display:block;margin-top:4px}
+
+/* Centro de alertas: cambios importadora y tareas de Facebook Marketplace */
+.supplier-alert-nav{position:relative}
+.supplier-alert-nav-count{margin-left:auto;min-width:24px;height:23px;display:inline-flex;align-items:center;justify-content:center;padding:1px 6px;border-radius:999px;background:#f04464;color:#fff;font-size:11px;line-height:1;font-weight:800}
+.supplier-alert-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:20px 0}
+.supplier-alert-stat{padding:16px 17px;border:1px solid var(--line);background:var(--surface2);border-radius:15px;display:flex;flex-direction:column;gap:6px}
+.supplier-alert-stat strong{font-size:29px;line-height:1.1;color:var(--text);font-variant-numeric:tabular-nums}
+.supplier-alert-stat small{color:var(--muted);font-weight:650}
+.supplier-alert-stat.pending{border-color:rgba(233,182,90,.42)}
+.supplier-alert-stat.out{border-color:rgba(255,100,121,.44)}
+.supplier-alert-stat.priceup{border-color:rgba(246,179,75,.32)}
+.supplier-alert-stat.pricedown,.supplier-alert-stat.restocked{border-color:rgba(82,217,158,.32)}
+.supplier-alert-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+.supplier-alert-toolbar select{flex:1 1 180px}
+.supplier-alert-toolbar input{flex:2 1 230px}
+.supplier-alert-toolbar button{flex:0 0 auto}
+.supplier-alert-list{display:flex;flex-direction:column;gap:13px;margin-top:14px}
+.supplier-alert-card{--alert-accent:#e9b65a;position:relative;display:flex;align-items:flex-start;gap:16px;padding:19px;border:1px solid var(--line);border-left:4px solid var(--alert-accent);border-radius:16px;background:var(--surface2)}
+.supplier-alert-card.new{--alert-accent:#5dabf2}
+.supplier-alert-card.out{--alert-accent:#fc697e}
+.supplier-alert-card.restocked{--alert-accent:#5ad9ae}
+.supplier-alert-card.priceup{--alert-accent:#f2ad58}
+.supplier-alert-card.pricedown{--alert-accent:#72d4a5}
+.supplier-alert-card.reviewed{opacity:.70;border-left-color:var(--line)}
+.supplier-alert-photo{width:96px;height:96px;object-fit:cover;border-radius:14px;flex:0 0 96px;background:#31394a}
+.supplier-alert-photo-empty{display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--muted)}
+.supplier-alert-main{min-width:0;flex:1}
+.supplier-alert-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:7px}
+.supplier-alert-heading small{color:var(--muted)}
+.supplier-alert-kind{display:inline-block;background:color-mix(in srgb,var(--alert-accent) 17%,transparent);border:1px solid color-mix(in srgb,var(--alert-accent) 48%,transparent);color:var(--alert-accent);padding:4px 9px;border-radius:8px;font-size:12px;font-weight:800}
+.supplier-alert-product{display:block;font-size:16px;line-height:1.35;overflow-wrap:anywhere}
+.supplier-alert-sku{display:block;color:var(--muted);margin:4px 0 8px}
+.supplier-alert-delta{font-size:14px;margin:8px 0;color:var(--text);line-height:1.5;overflow-wrap:anywhere}
+.supplier-alert-advice{border:1px solid var(--line);background:rgba(8,12,21,.30);padding:10px 12px;border-radius:10px;color:var(--text);font-size:13px;line-height:1.5;margin:10px 0}
+.supplier-alert-ownstock{color:var(--muted);display:block;margin:8px 0}
+.supplier-alert-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.supplier-alert-actions .mini{font-size:12px}
+.supplier-alert-done{background:rgba(64,170,115,.22)!important;border-color:rgba(64,210,139,.4)!important;color:#a7f1ca!important}
+.supplier-alert-explainer{margin-top:15px;line-height:1.55}
+.supplier-alert-explainer p{margin-top:7px}
+@media(max-width:660px){
+ .supplier-alert-metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ .supplier-alert-stat{padding:12px}
+ .supplier-alert-stat strong{font-size:24px}
+ .supplier-alert-toolbar input,.supplier-alert-toolbar select{flex-basis:100%}
+ .supplier-alert-card{gap:12px;padding:13px;flex-wrap:wrap}
+ .supplier-alert-photo{width:68px;height:68px;flex-basis:68px}
+ .supplier-alert-main{flex-basis:calc(100% - 85px)}
+ .supplier-alert-heading{align-items:flex-start}
+ .supplier-alert-actions .mini{flex-grow:1}
+}
