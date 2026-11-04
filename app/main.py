@@ -1,6 +1,6 @@
 import os, secrets, hashlib, asyncio, zipfile, io, uuid, hmac
 from contextlib import asynccontextmanager
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from io import BytesIO
@@ -13,7 +13,7 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import Session, selectinload
 from PIL import Image, ImageOps, UnidentifiedImageError
 from .models import (ROOT,DATA,SessionLocal,init_db,now,Admin,LoginSession,Product,Photo,
-                     Sale,SaleLine,Delivery,Notification,GenerationJob,GeneratedImage,Audit,PushSubscription,PaymentRecord,WholesaleProfile,BranchStock,BranchTransfer,SupplierCatalogUpdate)
+                     Sale,SaleLine,Delivery,Notification,GenerationJob,GeneratedImage,Audit,PushSubscription,PaymentRecord,WholesaleProfile,BranchStock,BranchTransfer,SupplierCatalogUpdate,SupplierAlert)
 from .security import (authenticated,check_csrf,resolve,hash_token,new_login,login_allowed,failed_login,verify_pass)
 from .worker import worker_loop,FILES
 from .excel_export import products_excel
@@ -322,6 +322,58 @@ async def edit_product(product_id:int,data:ProductInput,user=Depends(check_csrf)
     p.sale_price=money(data.sale_price);p.purchase_cost=money(data.purchase_cost)
     audit(db,user,'product.update',str(product_id));db.commit();await broadcast()
     return serial_product(p)
+
+class SupplierAlertReviewInput(BaseModel):
+    reviewed: bool = True
+
+@app.get('/api/supplier/alerts')
+def list_supplier_alerts(user=Depends(authenticated),db:Session=Depends(get_db)):
+    """Centro de acciones para Marketplace. Las alertas se detectan en PostgreSQL."""
+    rows=db.execute(
+        select(SupplierAlert,Product.sku,Product.name)
+        .join(Product,SupplierAlert.product_id==Product.id)
+        .order_by(SupplierAlert.id.desc()).limit(350)
+    ).all()
+    pending=db.scalar(
+        select(func.count()).select_from(SupplierAlert)
+        .where(SupplierAlert.reviewed_at.is_(None))
+    ) or 0
+    return {
+        'pending_count':pending,
+        'items':[
+            {
+                'id':a.id,'product_id':a.product_id,'sku':sku,'product_name':name,
+                'kind':a.kind,'old_supplier_stock':a.old_supplier_stock,
+                'new_supplier_stock':a.new_supplier_stock,
+                'old_supplier_unit_price':float(a.old_supplier_unit_price) if a.old_supplier_unit_price is not None else None,
+                'new_supplier_unit_price':float(a.new_supplier_unit_price) if a.new_supplier_unit_price is not None else None,
+                'source_label':a.source_label,
+                'created_at':a.created_at.isoformat(),
+                'reviewed_at':a.reviewed_at.isoformat() if a.reviewed_at else None
+            }
+            for a,sku,name in rows
+        ],
+    }
+
+@app.post('/api/supplier/alerts/{alert_id}/review')
+async def review_supplier_alert(alert_id:int, data:SupplierAlertReviewInput,
+                                user=Depends(check_csrf), db:Session=Depends(get_db)):
+    """Solo marca la gestión en MegaBot; no publica ni elimina anuncios de Facebook."""
+    alert=db.get(SupplierAlert,alert_id)
+    if not alert:
+        raise HTTPException(404,'Alerta no encontrada')
+    if data.reviewed:
+        if alert.reviewed_at is None:
+            alert.reviewed_at=datetime.now(timezone.utc)
+            alert.reviewed_by=user['id']
+    else:
+        alert.reviewed_at=None
+        alert.reviewed_by=None
+    audit(db,user,'supplier.alert.review',f'{alert_id}: {data.reviewed}')
+    db.commit()
+    await broadcast()
+    return {'id':alert.id,'reviewed':alert.reviewed_at is not None,
+            'reviewed_at':alert.reviewed_at.isoformat() if alert.reviewed_at else None}
 
 class SupplierStatusInput(BaseModel):
     status: Literal['disponible','agotado','sin_revisar']
