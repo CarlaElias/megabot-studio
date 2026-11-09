@@ -3,6 +3,36 @@ const $ = s=>document.querySelector(s);
 const $$ = s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const bs=v=>'Bs '+Number(v||0).toFixed(2);
+/* MegaBot Android instalable: Chrome/POCO, sin dependencias de terceros. */
+let pwaInstallPrompt=null;
+const pwaIsAndroid=/Android/i.test(navigator.userAgent||'');
+function pwaIsStandalone(){
+ return window.matchMedia('(display-mode: standalone)').matches ||
+        window.navigator.standalone===true;
+}
+function updatePwaInstallButtons(){
+ const visible=pwaIsAndroid&&!pwaIsStandalone();
+ const login=$('#pwaLoginInstall'),banner=$('#pwaInstallBanner');
+ if(login)login.classList.toggle('hidden',!visible);
+ if(banner)banner.classList.toggle('hidden',!visible);
+}
+function showPwaGuide(){
+ const overlay=$('#pwaInstallHelp');
+ if(overlay){overlay.classList.remove('hidden');$('#pwaHelpClose')?.focus()}
+}
+function closePwaGuide(){$('#pwaInstallHelp')?.classList.add('hidden')}
+window.addEventListener('beforeinstallprompt',event=>{
+ if(!pwaIsAndroid)return;
+ event.preventDefault();
+ pwaInstallPrompt=event;
+ updatePwaInstallButtons();
+});
+window.addEventListener('appinstalled',()=>{
+ pwaInstallPrompt=null;
+ updatePwaInstallButtons();
+ const node=$('#pwaInstallHelp');if(node)node.classList.add('hidden');
+});
+
 const st={me:null,products:[],wholesale:[],sales:[],deliveries:[],jobs:[],notices:[],audit:[],page:'dashboard',selectedJob:null,galleryImages:[],lastNotification:null,ws:null,branchStocks:{},branchTransfers:[],supplierHistory:[],supplierAlerts:[],supplierAlertCount:null};
 function csrf(){return decodeURIComponent((document.cookie.match(/(?:^|; )megabot_csrf=([^;]+)/)||[])[1]||'')}
 async function api(path,opts={}){
@@ -559,7 +589,7 @@ on('#enablePush','click',async()=>{try{
   let config=await api('/push/config');
   if(!config.enabled)throw Error('Falta configurar VAPID y HTTPS en el servidor. Los avisos seguirán visibles dentro de MegaBot.');
   let permission=await Notification.requestPermission();if(permission!=='granted')throw Error('No autorizaste las notificaciones en este dispositivo.');
-  let registration=await navigator.serviceWorker.register('/static/sw.js');
+  let registration=await navigator.serviceWorker.register('/sw.js',{scope:'/'});
   const key=Uint8Array.from(atob(config.public_key.replace(/-/g,'+').replace(/_/g,'/').padEnd(Math.ceil(config.public_key.length/4)*4,'=')),c=>c.charCodeAt(0));
   let sub=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:key});
   await api('/push/subscribe',{method:'POST',body:JSON.stringify(sub.toJSON())});toast('Notificaciones push activadas en este dispositivo');
@@ -581,3 +611,34 @@ async function refreshTeam(){try{const a=await api('/admins');$('#teamAdmins').i
 on('#teamAdminForm','submit',async e=>{e.preventDefault();try{await api('/admins',{method:'POST',body:JSON.stringify({username:$('#teamUsername').value,display_name:$('#teamDisplay').value,password:$('#teamPassword').value})});$('#teamAdminForm').reset();await refreshTeam();toast('Administrador agregado')}catch(ex){toast(ex.message,true)}});
 (async()=>{try{st.me=await api('/me');showApp();await refresh();await refreshTeam();realtime()}catch{showLogin();try{const setup=await api('/setup/status');if(setup.needs_setup&&setup.setup_available)showSetup()}catch{}}})();
 setInterval(()=>{if(st.me)refresh()},45000);
+
+/* Instalación Android y registro PWA de alcance raíz, disponible antes de iniciar sesión. */
+document.querySelectorAll('[data-install-pwa]').forEach(button=>{
+ button.addEventListener('click',async()=>{
+  if(pwaIsStandalone())return;
+  if(!pwaInstallPrompt){showPwaGuide();return}
+  const prompt=pwaInstallPrompt;
+  pwaInstallPrompt=null;
+  try{
+   await prompt.prompt();
+   const answer=await prompt.userChoice;
+   if(answer?.outcome==='accepted')toast('Instalación iniciada. Busca MegaBot entre las aplicaciones de tu POCO.');
+  }catch(err){
+   console.warn('Instalación mediante Chrome no disponible',err);
+   showPwaGuide();
+  }
+  updatePwaInstallButtons();
+ });
+});
+$('#pwaHelpClose')?.addEventListener('click',closePwaGuide);
+$('#pwaInstallHelp')?.addEventListener('click',event=>{
+ if(event.target.id==='pwaInstallHelp')closePwaGuide();
+});
+document.addEventListener('keydown',event=>{
+ if(event.key==='Escape')closePwaGuide();
+});
+updatePwaInstallButtons();
+if('serviceWorker' in navigator && (location.protocol==='https:'||location.hostname==='localhost')){
+ navigator.serviceWorker.register('/sw.js',{scope:'/'})
+  .catch(err=>console.warn('MegaBot funciona en línea, pero no pudo registrar el modo instalable',err));
+}
