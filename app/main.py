@@ -92,6 +92,16 @@ def audit(db,user,action,detail=''):
 @app.get('/')
 def home(): return FileResponse(ROOT/'app'/'static'/'index.html')
 
+@app.get('/sw.js')
+def mobile_service_worker():
+    """Service worker de alcance raíz para instalar MegaBot en Android."""
+    return FileResponse(
+        ROOT/'app'/'static'/'sw.js',
+        media_type='application/javascript',
+        headers={'Service-Worker-Allowed':'/','Cache-Control':'no-cache'}
+    )
+
+
 class LoginInput(BaseModel):
     username:str
     password:str
