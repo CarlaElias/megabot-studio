@@ -57,35 +57,62 @@ async function refresh(){
 }
 async function refreshOnce(){
  if(!st.me)return;
- try{
-  const paths=['/products','/wholesale','/sales','/deliveries','/jobs','/notifications','/dashboard','/supplier/history','/supplier/alerts'];
-  const responses=[];
-  for(let i=0;i<paths.length;i+=2){
-   const group=await Promise.all(paths.slice(i,i+2).map(path=>api(path)));
-   responses.push(...group);
-  }
-  const [products,wholesale,sales,deliveries,jobs,notices,dashboard,supplierHistory,supplierAlertFeed]=responses;
-  const location=await api('/branches/lapaz');st.branchStocks=location.stocks||{};st.branchTransfers=location.transfers||[];
-  const oldSupplierCount=st.supplierAlertCount;
-  let old=st.lastNotification;st.products=products;st.wholesale=wholesale;st.sales=sales;st.deliveries=deliveries;st.jobs=jobs;st.notices=notices;st.dashboard=dashboard;st.supplierHistory=supplierHistory;
-  st.supplierAlerts=supplierAlertFeed.items||[];
-  st.supplierAlertCount=Number(supplierAlertFeed.pending_count||0);
-  if(oldSupplierCount!==null && st.supplierAlertCount>oldSupplierCount){
-   const delta=st.supplierAlertCount-oldSupplierCount;
-   toast(delta+' novedad(es) de importadora. Revisa tus publicaciones en Facebook.');
-   if(window.Notification&&Notification.permission==='granted'){
-    new Notification('MegaBot · Alertas importadora',{body:delta+' cambios nuevos por revisar en tus productos.'});
+ // Las consultas se realizan en pares para no saturar Supabase Free.
+ // Si una falla, las demás siguen cargando y la pantalla no se queda bloqueada.
+ const paths=['/products','/wholesale','/sales','/deliveries','/jobs','/notifications','/dashboard','/supplier/history','/supplier/alerts'];
+ const previous=[st.products,st.wholesale,st.sales,st.deliveries,st.jobs,st.notices,st.dashboard||{},st.supplierHistory,
+   {items:st.supplierAlerts,pending_count:st.supplierAlertCount||0}];
+ const responses=[];
+ let partial=false;
+ for(let i=0;i<paths.length;i+=2){
+  const group=await Promise.allSettled(paths.slice(i,i+2).map(path=>api(path)));
+  group.forEach((result,j)=>{
+   if(result.status==='fulfilled')responses.push(result.value);
+   else{
+    partial=true;console.warn('Sincronización parcial de '+paths[i+j],result.reason);
+    responses.push(previous[i+j]);
    }
+  });
+ }
+ const [products,wholesale,sales,deliveries,jobs,notices,dashboard,supplierHistory,supplierAlertFeed]=responses;
+ try{
+  const location=await api('/branches/lapaz');
+  st.branchStocks=location.stocks||{};
+  st.branchTransfers=location.transfers||[];
+ }catch(err){
+  partial=true;
+  console.warn('Sucursal La Paz: sincronización pendiente',err);
+ }
+ const oldSupplierCount=st.supplierAlertCount;
+ const old=st.lastNotification;
+ st.products=products;st.wholesale=wholesale;st.sales=sales;
+ st.deliveries=deliveries;st.jobs=jobs;st.notices=notices;
+ st.dashboard=dashboard;st.supplierHistory=supplierHistory;
+ st.supplierAlerts=supplierAlertFeed.items||[];
+ st.supplierAlertCount=Number(supplierAlertFeed.pending_count||0);
+ const conn=$('#conn');
+ if(conn)conn.textContent=partial?'● Sincronización parcial':'● Sincronizado';
+ if(oldSupplierCount!==null&&st.supplierAlertCount>oldSupplierCount){
+  const delta=st.supplierAlertCount-oldSupplierCount;
+  toast(delta+' novedad(es) de importadora. Revisa tus publicaciones en Facebook.');
+  if(window.Notification&&Notification.permission==='granted'){
+   try{new Notification('MegaBot · Alertas importadora',{body:delta+' cambios nuevos por revisar en tus productos.'})}catch{}
   }
-  const newest=notices[0]?.id||0;
-  if(old!==null&&newest>old&&notices[0]){
-   toast(notices[0].message);
-   if(window.Notification&&Notification.permission==='granted')new Notification('MegaBot • Notificación',{body:notices[0].message});
+ }
+ const newest=notices[0]?.id||0;
+ if(old!==null&&newest>old&&notices[0]){
+  toast(notices[0].message);
+  if(window.Notification&&Notification.permission==='granted'){
+   try{new Notification('MegaBot • Notificación',{body:notices[0].message})}catch{}
   }
-  st.lastNotification=newest;
-  render();
- }catch(e){console.error(e);$('#conn').textContent='● Sincronización pendiente'}
+ }
+ st.lastNotification=newest;
+ render();
+ if(partial&&st.me){
+  console.info('MegaBot permanece disponible. Las consultas fallidas se reintentarán automáticamente.');
+ }
 }
+
 function navigate(page){st.page=page;$$('.page').forEach(e=>e.classList.toggle('hidden',e.id!=='page-'+page));$$('.nav').forEach(e=>e.classList.toggle('active',e.dataset.page===page));let txt=$(`.nav[data-page="${page}"] span`);$('#crumb').textContent=txt?.textContent||'Panel principal';$('.sidebar').classList.remove('open');render()}
 function render(){if(!st.me)return; renderMetrics();renderProducts();renderSupplier();renderSupplierAlerts();renderSupplierHistory();renderInventory();renderBranches();renderSales();renderDeliveries();renderJobs();renderOptions();renderNotifications();renderAudit();}
 function renderMetrics(){let x=st.dashboard||{};let metrics=[['▤','Productos activos',x.products||0],['◆','Ventas confirmadas',bs(x.sales_total)],['✧','Ganancia estimada',bs(x.profit_total)],['◈','Imágenes terminadas',x.images||0],['▣','Unidades disponibles',st.products.reduce((acc,p)=>acc+Number(p.stock||0)+Number(st.branchStocks[p.id]||0),0)],['◉','Capital en stock',bs(st.products.reduce((acc,p)=>acc+(Number(p.stock||0)+Number(st.branchStocks[p.id]||0))*Number(p.purchase_cost||0),0))],['◷','Saldo por cobrar',bs(x.pending_balance)],['✦','Lotes en progreso',x.jobs_running||0]];
