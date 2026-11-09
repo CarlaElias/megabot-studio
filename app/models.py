@@ -18,7 +18,8 @@ if DB_URL.startswith('sqlite:///./'):
 if DB_URL.startswith(('postgres://','postgresql://')):
     DB_URL = DB_URL.replace('postgres://', 'postgresql+psycopg://', 1).replace('postgresql://', 'postgresql+psycopg://', 1)
 if DB_URL.startswith('postgresql+psycopg://'):
-    engine = create_engine(DB_URL, pool_pre_ping=True, pool_size=2, max_overflow=1,
+    engine = create_engine(DB_URL, pool_pre_ping=True, pool_size=4, max_overflow=2,
+        pool_timeout=12, pool_recycle=1800,
         connect_args={'options':'-csearch_path=public', 'sslmode':'require'})
 else:
     engine = create_engine(DB_URL, pool_pre_ping=True,
