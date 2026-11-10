@@ -141,3 +141,39 @@
 @media(max-width:850px){.footer-megacompra .footer-inner{grid-template-columns:repeat(2,minmax(0,1fr));gap:27px;padding:39px 22px}.footer-megacompra .footer-links{grid-column:1 / -1}.footer-megacompra .footer-bottom{padding:18px 22px}}
 @media(max-width:580px){.footer-megacompra .footer-inner{grid-template-columns:1fr;padding:35px 22px 29px;gap:29px}.footer-megacompra .footer-links{grid-column:auto}.footer-megacompra .footer-heading{margin:0 0 7px}.footer-megacompra .footer-bottom{padding:19px 22px;flex-direction:column;align-items:flex-start;gap:7px;font-size:11px}.footer-megacompra .footer-brand h2{font-size:20px}}
 @media(prefers-reduced-motion:reduce){.footer-megacompra a{transition:none!important}}
+
+
+/* Fondo de temporada: ilustración MegaCompra, suave para no tapar productos. */
+body.christmas-theme main{
+ background-color:#fffaf4;
+ background-image:
+  linear-gradient(180deg,rgba(255,251,246,.82),rgba(255,253,250,.87)),
+  url('/static/megacompra-fondo-navidad.svg');
+ background-position:center top,center top;
+ background-repeat:no-repeat,no-repeat;
+ background-size:cover,cover;
+ background-attachment:scroll,fixed;
+}
+body.christmas-theme .catalog-section,
+body.christmas-theme .arrivals-section,
+body.christmas-theme .quick-benefits{
+ position:relative;
+}
+body.christmas-theme .product-card,
+body.christmas-theme .filter-sidebar,
+body.christmas-theme .hero-side-card,
+body.christmas-theme .catalog-controls{
+ box-shadow:0 6px 22px rgba(90,45,35,.08);
+}
+@media(max-width:700px){
+ body.christmas-theme main{
+  background-image:linear-gradient(180deg,rgba(255,251,246,.86),rgba(255,253,250,.9)),url('/static/megacompra-fondo-navidad.svg');
+  background-attachment:scroll,scroll;
+  background-size:cover,auto 100vh;
+  background-position:center top,center top;
+  background-repeat:no-repeat,repeat-y;
+ }
+}
+@media(prefers-reduced-motion:reduce){
+ body.christmas-theme main{background-attachment:scroll,scroll}
+}
