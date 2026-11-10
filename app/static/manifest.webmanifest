@@ -9,9 +9,15 @@
   "theme_color": "#101117",
   "icons": [
     {
-      "src": "/static/megabot-icon-192.webp",
+      "src": "/static/megacompra-icon-minimal-192.webp",
       "sizes": "192x192",
       "type": "image/webp",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/megacompra-icon-minimal.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
       "purpose": "any"
     },
     {
