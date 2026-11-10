@@ -54,6 +54,43 @@ def test_integrated_flow():
         assert upload.status_code==201, upload.text
         photo=c.get('/api/products').json()[0]['photos'][0]
         assert c.get(photo['url']).status_code==200
+
+        # El catálogo de clientes no publica nada sin autorización explícita.
+        assert c.get('/catalogo').status_code==200
+        assert c.get('/api/catalogo/publico').json()['products']==[]
+        assert c.get(f'/catalogo/foto/{photo["id"]}').status_code==404
+        public_rows=c.get('/api/catalogo/admin')
+        assert public_rows.status_code==200
+        assert public_rows.json()[0]['published'] is False
+        catalog_data={
+            'published':True,'available':True,'available_units':5,
+            'price_unit':40,'price_three':37,'price_dozen':34,
+            'price_case':600,'case_units':24
+        }
+        public_edit=f'/api/catalogo/admin/{product["id"]}'
+        assert c.put(public_edit,json=catalog_data).status_code==403
+        assert c.put(public_edit,json={**catalog_data,'price_unit':None},headers=headers).status_code==422
+        assert c.put(public_edit,json={**catalog_data,'case_units':None},headers=headers).status_code==422
+        published=c.put(public_edit,json=catalog_data,headers=headers)
+        assert published.status_code==200,published.text
+        assert published.json()['published'] is True
+        public_response=c.get('/api/catalogo/publico')
+        assert public_response.status_code==200
+        public_item=public_response.json()['products'][0]
+        assert public_item['name']=='Aceitero de vidrio'
+        assert public_item['price_unit']==40.0 and public_item['price_three']==37.0
+        assert public_item['price_dozen']==34.0 and public_item['price_case']==600.0
+        assert public_item['case_units']==24 and public_item['available_units']==5
+        assert public_item['photos']==[f'/catalogo/foto/{photo["id"]}']
+        for forbidden in ('purchase_cost','supplier_unit_price','supplier_stock','csrf_hash','password_hash','stock'):
+            assert forbidden not in public_item
+        assert c.get(public_item['photos'][0]).status_code==200
+        hidden=c.put(public_edit,json={**catalog_data,'published':False},headers=headers)
+        assert hidden.status_code==200
+        assert c.get('/api/catalogo/publico').json()['products']==[]
+        assert c.get(f'/catalogo/foto/{photo["id"]}').status_code==404
+        internal=c.get('/api/products').json()[0]
+        assert internal['sale_price']==40.0 and internal['purchase_cost']==22.0
         draft=c.get(f'/api/products/{product["id"]}/draft').json()
         assert 'Bs 40.00' in draft['facebook_description']
         assert '22' not in draft['facebook_description']
