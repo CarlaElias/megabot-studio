@@ -8,9 +8,9 @@
  <meta name="robots" content="index,follow">
  <title>Mega Compra | Catálogo por mayor y menor</title>
  <link rel="icon" href="/static/megacompra-icon-minimal-192.webp" type="image/webp">
- <link rel="stylesheet" href="/static/catalogo.css?v=7">
+ <link rel="stylesheet" href="/static/catalogo.css?v=8">
  <link rel="stylesheet" href="/static/catalogo-navidad.css?v=1">
- <script defer src="/static/catalogo.js?v=6"></script>
+ <script defer src="/static/catalogo.js?v=7"></script>
  <script defer src="/static/catalogo-navidad.js?v=1"></script>
 </head>
 <body>
@@ -147,10 +147,41 @@
    <a id="bottomWhatsapp" href="#" target="_blank" rel="noopener noreferrer"><img class="whatsapp-christmas-icon" src="/static/whatsapp-navidad.svg?v=1" alt="" width="32" height="32"> ESCRÍBENOS POR WHATSAPP <span>↗</span></a>
   </section>
  </main>
- <footer class="footer">
-  <div><img src="/static/megacompra-icon-minimal-192.webp" alt="" width="52" height="52"><div><strong>MEGACOMPRA</strong><p>Precios bajos · Por menor y por mayor</p></div></div>
-  <p>Precios y disponibilidad sujetos a confirmación. Pedidos mediante WhatsApp.</p>
-  <small>La Paz, Bolivia</small>
+ <footer class="footer footer-megacompra" id="pieDePagina">
+  <div class="footer-inner">
+   <section class="footer-column footer-about" aria-labelledby="footerBrandHeading">
+    <div class="footer-brand">
+     <img src="/static/megacompra-icon-minimal-192.webp" alt="" width="50" height="50" loading="lazy">
+     <h2 id="footerBrandHeading">MEGA<span>COMPRA</span></h2>
+    </div>
+    <p>Tu tienda de productos para el hogar, tecnología y mucho más. Compra por menor o por mayor en un solo lugar.</p>
+    <div class="footer-location">
+     <span class="footer-location-icon" aria-hidden="true">📍</span>
+     <span><strong>La Paz, Bolivia</strong><small>Entregas y envíos previa coordinación.</small></span>
+    </div>
+    <a class="footer-map-link" href="https://www.google.com/maps/search/?api=1&amp;query=La+Paz%2C+Bolivia" target="_blank" rel="noopener noreferrer" aria-label="Ver la ciudad de La Paz en Google Maps; no indica dirección exacta de tienda">
+     <span aria-hidden="true">⌖</span> Ver La Paz en Google Maps <span aria-hidden="true">↗</span>
+    </a>
+   </section>
+   <section class="footer-column footer-contact" aria-labelledby="footerContactHeading">
+    <h2 class="footer-heading" id="footerContactHeading">CONTACTO</h2>
+    <a id="footerWhatsapp" class="footer-contact-link" href="#" target="_blank" rel="noopener noreferrer" hidden>
+     <img src="/static/whatsapp-navidad.svg?v=1" width="30" height="30" alt="" loading="lazy">
+     <span><strong>WhatsApp MegaCompra</strong><small id="footerWhatsappNumber">Atención por mensaje</small></span>
+    </a>
+    <p class="footer-note">Consulta modelos, precios, existencias, entregas y envíos directamente con nuestro equipo.</p>
+    <div class="footer-delivery"><span aria-hidden="true">🚚</span><span>Envíos a provincias y departamentos, sujetos a coordinación.</span></div>
+   </section>
+   <nav class="footer-column footer-links" aria-label="Enlaces útiles de MegaCompra">
+    <h2 class="footer-heading">EXPLORA MEGACOMPRA</h2>
+    <a href="/catalogo">🛍️ Catálogo por menor</a>
+    <a href="/catalogo/mayoristas">📦 Catálogo por mayor</a>
+    <a href="/catalogo#nuevos">✨ Nuevos ingresos</a>
+    <a href="/catalogo#productos">🔎 Ver productos</a>
+    <p class="footer-note">Los pedidos se confirman por WhatsApp. Precios y disponibilidad sujetos a confirmación.</p>
+   </nav>
+  </div>
+  <div class="footer-bottom"><span>© 2026 MegaCompra. Todos los derechos reservados.</span><span>La Paz, Bolivia <span aria-hidden="true">✦</span> Por menor y por mayor</span></div>
  </footer>
  <div id="overlay" class="overlay hidden"></div>
  <div id="productDialog" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="dialogTitle">
