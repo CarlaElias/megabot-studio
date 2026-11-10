@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Mega Compra, bolsa de compras roja">
+<rect width="512" height="512" rx="98" fill="#fff"/>
+<path d="M92 347C100 414 302 430 443 355C395 415 299 443 195 423C122 409 83 376 92 347Z" fill="#f5a900"/>
+<path d="M143 145L349 122Q377 119 388 150L426 329Q425 355 397 369L111 369Q83 362 86 335L120 179Q124 149 143 145Z" fill="#ee142b"/>
+<path d="M353 125L390 148L426 329Q425 354 397 369L333 369Q376 252 353 125Z" fill="#b70d22"/>
+<path d="M182 160C187 104 200 73 245 71C292 70 320 102 325 160" fill="none" stroke="#222" stroke-width="29" stroke-linecap="round"/>
+<path d="M182 160C187 104 200 73 245 71C292 70 320 102 325 160" fill="none" stroke="#313131" stroke-width="19" stroke-linecap="round"/>
+<circle cx="182" cy="160" r="20" fill="#fff"/><circle cx="325" cy="160" r="20" fill="#fff"/>
+<circle cx="182" cy="160" r="11" fill="#222"/><circle cx="325" cy="160" r="11" fill="#222"/>
+<path d="M159 216L203 216L218 303L334 303L362 228L207 241" fill="none" stroke="#fff" stroke-width="19" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M222 268L352 257" fill="none" stroke="#fff" stroke-width="13" stroke-linecap="round"/>
+<circle cx="242" cy="331" r="16" fill="#fff"/><circle cx="319" cy="331" r="16" fill="#fff"/>
+<path d="M408 124L434 81L456 93L419 138Z" fill="#f5ac00"/>
+<path d="M424 163L466 137L479 157L434 178Z" fill="#f5ac00"/>
+<path d="M429 203L477 192L483 216L434 220Z" fill="#f5ac00"/>
+</svg>
