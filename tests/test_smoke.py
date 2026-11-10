@@ -56,7 +56,17 @@ def test_integrated_flow():
         assert c.get(photo['url']).status_code==200
 
         # El catálogo de clientes no publica nada sin autorización explícita.
-        assert c.get('/catalogo').status_code==200
+        shop_page=c.get('/catalogo')
+        assert shop_page.status_code==200
+        assert 'id="categoryNav"' in shop_page.text
+        assert 'id="productSearch"' in shop_page.text
+        assert 'id="newArrivals"' in shop_page.text
+        assert 'id="cartDrawer"' in shop_page.text
+        assert 'id="sendOrder"' in shop_page.text
+        assert 'id="productGrid"' in shop_page.text
+        assert c.get('/static/catalogo.js').status_code==200
+        assert 'orderLink()' in c.get('/static/catalogo.js').text
+        assert c.get('/static/catalogo.css').status_code==200
         assert c.get('/api/catalogo/publico').json()['products']==[]
         assert c.get(f'/catalogo/foto/{photo["id"]}').status_code==404
         public_rows=c.get('/api/catalogo/admin')
@@ -78,6 +88,7 @@ def test_integrated_flow():
         assert public_response.status_code==200
         public_item=public_response.json()['products'][0]
         assert public_item['name']=='Aceitero de vidrio'
+        assert public_item['sku']==product['sku']
         assert public_item['price_unit']==40.0 and public_item['price_three']==37.0
         assert public_item['price_dozen']==34.0 and public_item['price_case']==600.0
         assert public_item['case_units']==24 and public_item['available_units']==5
