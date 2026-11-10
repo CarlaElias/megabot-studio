@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="WhatsApp navideño">
+<defs>
+ <linearGradient id="g" x1="0" y1="0" x2=".9" y2="1"><stop stop-color="#12e777"/><stop offset="1" stop-color="#009f49"/></linearGradient>
+ <linearGradient id="hat" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ff595b"/><stop offset=".48" stop-color="#ed0b21"/><stop offset="1" stop-color="#b6001a"/></linearGradient>
+ <filter id="shade" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#003725" flood-opacity=".23"/></filter>
+</defs>
+<g filter="url(#shade)">
+ <path d="M23 84c-7-12-8-27-3-40 7-18 24-29 44-29 26 0 46 20 46 46s-20 46-46 46c-9 0-17-2-24-6L15 108l8-24z" fill="url(#g)"/>
+ <path d="M30 82c-5-10-6-24-1-35 7-16 19-23 35-23 22 0 38 16 38 38 0 21-16 38-38 38-8 0-15-2-22-6l-17 4 5-16z" fill="none" stroke="#fff" stroke-width="4.5"/>
+ <path d="M46 43c-4 0-9 7-9 12 0 13 20 34 35 35 6 0 14-6 14-10 0-2-2-3-4-4l-11-5c-2-1-4 4-7 7-8-3-14-9-18-17 3-3 7-6 6-8l-4-9c-1-1-1-1-2-1z" fill="#fff"/>
+</g>
+<g filter="url(#shade)">
+ <path d="M35 36C39 14 60 5 79 9c17 3 26 16 30 34 2 10 4 13 9 16-12 0-17-7-20-12-16-13-34-14-63-11z" fill="url(#hat)"/>
+ <path d="M40 21c13-12 30-12 43-4" stroke="#ffabb0" stroke-width="5" stroke-linecap="round" fill="none" opacity=".68"/>
+ <path d="M20 42c6-9 17-13 31-15 22-3 39 3 51 13 5 4 6 12 1 17-4 4-9 3-14 0-20-11-40-14-62-2-7 3-13 0-13-6 0-2 3-5 6-7z" fill="#fff"/>
+ <path d="M26 43c25-12 47-8 70 5" fill="none" stroke="#e8f0ed" stroke-width="3" opacity=".65"/>
+ <circle cx="114" cy="61" r="12" fill="#fff"/>
+ <circle cx="111" cy="58" r="7" fill="#fafafa"/>
+</g>
+</svg>
