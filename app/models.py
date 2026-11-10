@@ -191,6 +191,21 @@ class SupplierAlert(Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     reviewed_by: Mapped[int | None] = mapped_column(ForeignKey('admins.id', ondelete='SET NULL'), nullable=True)
 
+class CatalogEntry(Base):
+    """Configuración PUBLICABLE: ningún precio de compra ni stock del proveedor se expone."""
+    __tablename__='catalog_entries'
+    product_id: Mapped[int] = mapped_column(ForeignKey('products.id',ondelete='CASCADE'), primary_key=True)
+    published: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    available: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    available_units: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    price_unit: Mapped[Decimal | None] = mapped_column(Numeric(12,2), nullable=True)
+    price_three: Mapped[Decimal | None] = mapped_column(Numeric(12,2), nullable=True)
+    price_dozen: Mapped[Decimal | None] = mapped_column(Numeric(12,2), nullable=True)
+    price_case: Mapped[Decimal | None] = mapped_column(Numeric(12,2), nullable=True)
+    case_units: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
 def init_db():
     Base.metadata.create_all(engine)
 
