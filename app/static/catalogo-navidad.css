@@ -1,0 +1,121 @@
+/* Temporada navideña Mega Compra · efecto ligero, solo en el catálogo público. */
+:root{--christmas-green:#186b4e;--christmas-gold:#f4c877;--christmas-berry:#b9273d}
+.christmas-theme .announcement{
+ background:linear-gradient(90deg,#134632 0%,#1b6846 48%,#133e32 100%);
+}
+.christmas-theme .announcement-inner span:nth-child(even){color:#f4ddb0}
+.christmas-lights{display:none}
+.christmas-theme .christmas-lights{
+ display:flex;position:absolute;left:0;right:0;top:-1px;height:13px;z-index:3;
+ align-items:flex-start;justify-content:space-around;padding:0 7px;
+ pointer-events:none;overflow:visible
+}
+.christmas-lights::before{content:"";position:absolute;left:0;right:0;top:0;
+ border-top:2px solid rgba(34,98,66,.62);border-radius:50%}
+.christmas-lights span{display:block;position:relative;width:8px;height:13px;
+ border-radius:45% 45% 55% 55%;background:#f6be70;
+ box-shadow:0 0 9px 3px rgba(248,198,116,.25);
+ animation:christmas-twinkle 2.8s ease-in-out infinite;transform-origin:50% 0}
+.christmas-lights span::before{content:"";position:absolute;top:0;left:2px;
+ width:4px;height:4px;border-radius:1px;background:#405e4f}
+.christmas-lights span:nth-child(4n+1){background:#e94b54;box-shadow:0 0 10px 3px rgba(233,75,84,.3);animation-delay:-.6s}
+.christmas-lights span:nth-child(4n+2){background:#82d8a1;box-shadow:0 0 9px 3px rgba(130,216,161,.26);animation-delay:-1.25s}
+.christmas-lights span:nth-child(4n+3){background:#f9d684;box-shadow:0 0 10px 3px rgba(249,214,132,.28);animation-delay:-2.1s}
+.christmas-lights span:nth-child(5n){animation-duration:3.4s}
+@keyframes christmas-twinkle{
+ 0%,100%{opacity:.68;filter:brightness(.8)}
+ 50%{opacity:1;filter:brightness(1.35)}
+}
+.christmas-banner[hidden],.christmas-snow[hidden]{display:none!important}
+.christmas-banner{background:linear-gradient(90deg,#174d39,#1e6648 54%,#154333);
+ color:#fff;border-bottom:1px solid rgba(255,255,255,.17);position:relative;z-index:12}
+.christmas-banner-inner{max-width:1350px;margin:auto;min-height:41px;padding:7px 24px;
+ display:flex;justify-content:space-between;align-items:center;gap:16px}
+.christmas-banner-message{display:flex;flex-wrap:wrap;align-items:center;gap:8px;
+ font-size:12px;line-height:1.35;color:#f9f6ed}
+.christmas-banner-message strong{color:#ffe2a6;white-space:nowrap;font-weight:900}
+.christmas-snow-toggle{flex-shrink:0;border:1px solid rgba(255,255,255,.43);
+ background:rgba(255,255,255,.12);color:white;border-radius:99px;
+ padding:5px 12px;min-height:30px;font-size:11px;font-weight:800}
+.christmas-snow-toggle:hover{background:rgba(255,255,255,.25)}
+.christmas-theme .hero-main{background:radial-gradient(circle at 89% 42%,#b93547 0%,#db2f45 35%,#a62035 80%);
+ border:1px solid rgba(248,224,194,.2)}
+.christmas-theme .hero-main::after{content:"";position:absolute;inset:0;z-index:0;
+ pointer-events:none;background:radial-gradient(circle at 10% 80%,rgba(245,216,158,.09),transparent 36%)}
+.christmas-theme .hero-kicker{color:#ffecbd}
+.christmas-theme .hero-cta{background:#ffe6af;color:#80312e;box-shadow:0 5px 20px rgba(44,17,22,.13)}
+.christmas-theme .hero-cta:hover{background:#fff0cb}
+.christmas-theme .hero-side-card:first-child{background:linear-gradient(122deg,#154b3b,#28785b)}
+.christmas-theme .hero-side-card.light{background:#fff0d8}
+.christmas-theme .hero-side-card:first-child::after{border-color:rgba(248,224,177,.12)}
+.christmas-hero-decor,.christmas-sleigh{display:none}
+.christmas-theme .christmas-hero-decor{display:block;position:absolute;inset:0;z-index:1;pointer-events:none}
+.christmas-ornament{position:absolute;top:-18px;font-size:25px;color:#ffe6ad;
+ text-shadow:0 0 11px rgba(255,232,163,.5);
+ transform-origin:50% -18px;animation:christmas-swing 5s ease-in-out infinite}
+.christmas-ornament::before{content:"";position:absolute;bottom:24px;left:50%;width:1px;
+ height:28px;background:rgba(255,243,201,.58)}
+.christmas-ornament-one{left:68%;animation-delay:-1s}
+.christmas-ornament-two{left:78%;top:-9px;color:#e9fff1;font-size:21px;animation-delay:-3s}
+.christmas-ornament-three{left:94%;top:-16px;font-size:20px;animation-delay:-2.3s}
+@keyframes christmas-swing{
+ 0%,100%{transform:rotate(-8deg)}50%{transform:rotate(8deg)}
+}
+.christmas-theme .christmas-sleigh{display:block;position:absolute;z-index:1;
+ top:22px;right:-22%;opacity:.73;pointer-events:none;font-size:23px;white-space:nowrap;
+ filter:drop-shadow(0 4px 4px rgba(61,28,35,.28));
+ animation:christmas-sleigh-flight 23s linear infinite}
+@keyframes christmas-sleigh-flight{
+ 0%{transform:translateX(0) translateY(3px) rotate(-7deg)}
+ 47%{transform:translateX(-580px) translateY(-7px) rotate(1deg)}
+ 100%{transform:translateX(-1550px) translateY(6px) rotate(-5deg)}
+}
+.christmas-theme .hero-side-card:first-child>span{animation:christmas-gift-float 4.5s ease-in-out infinite}
+@keyframes christmas-gift-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+.christmas-theme .eyebrow{color:#b42a3a}
+.christmas-theme .product-card:hover{box-shadow:0 9px 25px rgba(39,84,61,.11)}
+.christmas-theme .cart-count{background:#136c4b}
+.christmas-theme .subtle-link{color:#ac2638}
+.christmas-snow{position:fixed;inset:0;z-index:28;pointer-events:none;overflow:hidden;
+ contain:strict;user-select:none;-webkit-user-select:none}
+.christmas-snowflake{position:absolute;left:var(--snow-x,50%);top:-40px;line-height:1;
+ font-size:var(--snow-size,14px);color:rgba(242,250,255,.82);
+ text-shadow:0 0 3px rgba(53,77,102,.55),0 1px 5px rgba(41,66,94,.40);
+ opacity:0;will-change:transform;
+ animation:christmas-snowfall var(--snow-duration,19s) linear var(--snow-delay,0s) infinite}
+.christmas-snowflake:nth-child(3n){color:rgba(211,235,240,.8)}
+.christmas-snowflake:nth-child(5n){color:rgba(244,238,221,.88);font-size:12px}
+@keyframes christmas-snowfall{
+ 0%{opacity:0;transform:translate3d(0,-20px,0) rotate(0deg)}
+ 7%{opacity:.56}
+ 85%{opacity:.55}
+ 100%{opacity:0;transform:translate3d(var(--snow-drift,45px),115vh,0) rotate(240deg)}
+}
+.christmas-snow.snow-paused .christmas-snowflake,
+.christmas-snow.snow-background-paused .christmas-snowflake{animation-play-state:paused}
+.christmas-theme .hero-main h1,.christmas-theme .hero-main p,
+.christmas-theme .hero-kicker,.christmas-theme .hero-cta{position:relative;z-index:2}
+@media(max-width:930px){
+ .christmas-theme .christmas-sleigh{animation-duration:19s}
+ .christmas-banner-inner{padding-left:16px;padding-right:16px}
+}
+@media(max-width:660px){
+ .christmas-lights span:nth-child(n+15){display:none}
+ .christmas-banner-inner{padding:8px 12px;gap:7px}
+ .christmas-banner-message{font-size:10px;gap:5px}
+ .christmas-banner-message>span:last-child{display:none}
+ .christmas-banner-message strong{font-size:11px}
+ .christmas-snow-toggle{font-size:10px;padding:5px 8px;min-height:28px}
+ .christmas-theme .christmas-sleigh{font-size:19px;top:14px;animation-duration:16s;opacity:.46}
+ .christmas-ornament-one{left:79%}
+ .christmas-ornament-two{left:91%}
+ .christmas-ornament-three{display:none}
+ .christmas-snowflake{font-size:11px;text-shadow:0 1px 3px rgba(33,66,86,.43)}
+}
+@media(prefers-reduced-motion:reduce){
+ .christmas-snow,.christmas-sleigh{display:none!important}
+ .christmas-lights span,.christmas-ornament,.christmas-theme .hero-side-card:first-child>span{animation:none!important}
+}
+@media print{
+ .christmas-banner,.christmas-lights,.christmas-snow,.christmas-sleigh,.christmas-hero-decor{display:none!important}
+}
