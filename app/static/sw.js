@@ -29,8 +29,8 @@ self.addEventListener('push',event=>{
  try{if(event.data)data={...data,...event.data.json()}}catch{}
  event.waitUntil(self.registration.showNotification(data.title,{
   body:data.body,
-  icon:'/static/megacompra-logo.webp',
-  badge:'/static/megabot-icon-192.webp',
+  icon:'/static/megacompra-icon-minimal-192.webp',
+  badge:'/static/megacompra-icon-minimal-192.webp',
   tag:'megabot-novedad'
  }));
 });
