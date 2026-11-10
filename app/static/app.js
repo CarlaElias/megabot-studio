@@ -33,7 +33,7 @@ window.addEventListener('appinstalled',()=>{
  const node=$('#pwaInstallHelp');if(node)node.classList.add('hidden');
 });
 
-const st={me:null,products:[],wholesale:[],sales:[],deliveries:[],jobs:[],notices:[],audit:[],page:'dashboard',selectedJob:null,galleryImages:[],lastNotification:null,ws:null,branchStocks:{},branchTransfers:[],supplierHistory:[],supplierAlerts:[],supplierAlertCount:null};
+const st={me:null,products:[],wholesale:[],sales:[],deliveries:[],jobs:[],notices:[],audit:[],page:'dashboard',selectedJob:null,galleryImages:[],lastNotification:null,ws:null,branchStocks:{},branchTransfers:[],supplierHistory:[],supplierAlerts:[],supplierAlertCount:null,catalogAdmin:[],catalogEditingId:null};
 function csrf(){return decodeURIComponent((document.cookie.match(/(?:^|; )megabot_csrf=([^;]+)/)||[])[1]||'')}
 async function api(path,opts={}){
  const method=opts.method||'GET';const headers=opts.headers||{};
@@ -113,8 +113,95 @@ async function refreshOnce(){
  }
 }
 
-function navigate(page){st.page=page;$$('.page').forEach(e=>e.classList.toggle('hidden',e.id!=='page-'+page));$$('.nav').forEach(e=>e.classList.toggle('active',e.dataset.page===page));let txt=$(`.nav[data-page="${page}"] span`);$('#crumb').textContent=txt?.textContent||'Panel principal';$('.sidebar').classList.remove('open');render()}
+function navigate(page){st.page=page;$$('.page').forEach(e=>e.classList.toggle('hidden',e.id!=='page-'+page));$$('.nav').forEach(e=>e.classList.toggle('active',e.dataset.page===page));let txt=$(`.nav[data-page="${page}"] span`);$('#crumb').textContent=txt?.textContent||'Panel principal';$('.sidebar').classList.remove('open');render();if(page==='catalog-editor')loadCatalogAdmin();}
 function render(){if(!st.me)return; renderMetrics();renderProducts();renderSupplier();renderSupplierAlerts();renderSupplierHistory();renderInventory();renderBranches();renderSales();renderDeliveries();renderJobs();renderOptions();renderNotifications();renderAudit();}
+/* Catálogo público: solo el administrador habilita los artículos y define los precios finales. */
+async function loadCatalogAdmin(){
+ const list=$('#catalogProductList');
+ if(!list)return;
+ $('#catalogListSummary').textContent='Cargando productos del catálogo…';
+ try{
+  st.catalogAdmin=await api('/catalogo/admin');
+  renderCatalogList();
+  if(st.catalogEditingId){
+   const current=st.catalogAdmin.find(x=>x.product_id===st.catalogEditingId);
+   if(current)fillCatalogEditor(current);
+  }
+ }catch(e){
+  console.warn('No se pudieron cargar las configuraciones públicas',e);
+  $('#catalogListSummary').textContent='No se pudo consultar el catálogo: '+e.message;
+  list.innerHTML='';
+ }
+}
+function renderCatalogList(){
+ const list=$('#catalogProductList');if(!list)return;
+ const rows=st.catalogAdmin||[];
+ const published=rows.filter(x=>x.published).length;
+ $('#catalogStats').innerHTML=[
+  ['Productos registrados',rows.length],['Publicados para clientes',published],['Sin publicar',rows.length-published]
+ ].map(([label,value])=>'<div class="inventory-kpi"><strong>'+value+'</strong><small>'+esc(label)+'</small></div>').join('');
+ const text=($('#catalogFind').value||'').trim().toLowerCase();
+ const filter=$('#catalogVisibility').value;
+ const matches=rows.filter(p=>
+  (filter==='all'||(filter==='published'&&p.published)||(filter==='hidden'&&!p.published)) &&
+  (!text||(p.name+' '+p.sku+' '+p.category).toLowerCase().includes(text))
+ );
+ $('#catalogListSummary').textContent=matches.length+' coincidencias · '+published+' visibles al público';
+ list.innerHTML=matches.map(p=>{
+  const photo=p.photos?.[0];
+  const image=photo?
+   '<img loading="lazy" class="catalog-list-photo" src="'+esc(photo.url)+'" alt="'+esc(p.name)+'">':
+   '<span class="catalog-list-photo catalog-no-photo">Sin foto</span>';
+  return '<div class="list-item catalog-list-item '+(p.product_id===st.catalogEditingId?'active':'')+'">'+
+   image+'<div class="catalog-list-body"><strong>'+esc(p.name)+'</strong>'+
+   '<small>'+esc(p.sku)+' · '+esc(p.category||'Otros')+'</small>'+
+   '<small>'+(p.published?'<span class="catalog-published">● Público</span>':'<span class="catalog-private">○ Sin publicar</span>')+
+   ' · '+p.photos.length+' foto(s)'+
+   (p.price_unit!==null?' · Bs '+Number(p.price_unit).toFixed(2):' · Sin precio público')+'</small></div>'+
+   '<button type="button" class="mini" data-catalog-edit="'+p.product_id+'">Configurar</button></div>';
+ }).join('')||'<p class="dim">No hay productos con ese filtro.</p>';
+}
+function fillCatalogEditor(p){
+ st.catalogEditingId=p.product_id;
+ $('#catalogProductId').value=p.product_id;
+ $('#catalogSelectedLabel').textContent=p.name+' · '+p.sku;
+ const photo=p.photos?.[0];
+ $('#catalogSelectedPhoto').innerHTML=photo?
+  '<img src="'+esc(photo.url)+'" alt="'+esc(p.name)+'">':
+  '<span>Primero agrega una fotografía desde el inventario de MegaBot.</span>';
+ const values={
+  '#catalogPriceUnit':p.price_unit,'#catalogPriceThree':p.price_three,
+  '#catalogPriceDozen':p.price_dozen,'#catalogPriceCase':p.price_case,
+  '#catalogCaseUnits':p.case_units,'#catalogDisplayUnits':p.available_units
+ };
+ for(const [selector,value] of Object.entries(values))$(selector).value=value===null?'':String(value);
+ $('#catalogAvailable').checked=p.available;
+ $('#catalogPublish').checked=p.published;
+ $('#catalogUnitHint').textContent='Precio actual de venta en MegaBot: Bs '+Number(p.sale_price_existing).toFixed(2)+
+  '. Usa ese precio como referencia o escribe uno distinto para el catálogo público.';
+ $('#catalogCaseHint').textContent=p.case_units&&p.price_case?
+  'Cada cajón de '+p.case_units+' unidades cuesta Bs '+Number(p.price_case).toFixed(2)+
+  ' (equivale a Bs '+(Number(p.price_case)/Number(p.case_units)).toFixed(2)+' por unidad).':
+  'El precio por cajón corresponde al total del cajón. Indica también cuántas piezas contiene.';
+ renderCatalogList();
+ $('#catalogEditorPanel').scrollIntoView({behavior:'smooth',block:'start'});
+}
+function catalogNullableNumber(selector){
+ const raw=$(selector).value.trim();
+ return raw===''?null:Number(raw);
+}
+function catalogFormData(){
+ return {
+  published:$('#catalogPublish').checked,available:$('#catalogAvailable').checked,
+  available_units:catalogNullableNumber('#catalogDisplayUnits'),
+  price_unit:catalogNullableNumber('#catalogPriceUnit'),
+  price_three:catalogNullableNumber('#catalogPriceThree'),
+  price_dozen:catalogNullableNumber('#catalogPriceDozen'),
+  case_units:catalogNullableNumber('#catalogCaseUnits'),
+  price_case:catalogNullableNumber('#catalogPriceCase')
+ };
+}
+
 function renderMetrics(){let x=st.dashboard||{};let metrics=[['▤','Productos activos',x.products||0],['◆','Ventas confirmadas',bs(x.sales_total)],['✧','Ganancia estimada',bs(x.profit_total)],['◈','Imágenes terminadas',x.images||0],['▣','Unidades disponibles',st.products.reduce((acc,p)=>acc+Number(p.stock||0)+Number(st.branchStocks[p.id]||0),0)],['◉','Capital en stock',bs(st.products.reduce((acc,p)=>acc+(Number(p.stock||0)+Number(st.branchStocks[p.id]||0))*Number(p.purchase_cost||0),0))],['◷','Saldo por cobrar',bs(x.pending_balance)],['✦','Lotes en progreso',x.jobs_running||0]];
  $('#metrics').innerHTML=metrics.map(a=>`<div class="metric"><div class="icon">${a[0]}</div><strong>${esc(a[2])}</strong><span>${esc(a[1])}</span></div>`).join('');
  $('#homeSales').innerHTML=st.sales.slice(0,4).map(s=>`<div class="list-item"><div><strong>Venta #${s.id} · ${esc(s.client)}</strong><small>${esc(s.created_at.slice(0,16).replace('T',' '))}</small></div><strong>${bs(s.total)}</strong></div>`).join('')||'<p>Sin ventas registradas.</p>';
@@ -458,6 +545,49 @@ on('#wholesaleList','click',async e=>{let ed=e.target.closest('[data-wh-edit]'),
 on('#inventoryFullList','click',e=>{const b=e.target.closest('[data-inventory-edit]');if(!b)return;let id=Number(b.dataset.inventoryEdit),w=st.wholesale.find(w=>w.product_id===id);if(w){navigate('wholesale');editWholesale(w.id)}else if(st.products.find(p=>p.id===id)?.home_location==='lapaz'){editLpProduct(id)}else{navigate('products');openEditor(id)}});
 on('#newProduct','click',()=>openEditor());on('#closeEditor','click',()=>$('#productEditor').classList.add('hidden'));
 on('#searchProducts','input',renderProducts);
+
+
+on('#catalogFind','input',renderCatalogList);
+on('#catalogVisibility','change',renderCatalogList);
+on('#catalogReload','click',loadCatalogAdmin);
+on('#catalogCopyLink','click',async()=>{
+ const link=location.origin+'/catalogo';
+ try{await navigator.clipboard.writeText(link);toast('Enlace del catálogo público copiado')}catch{
+  window.prompt('Copia el enlace de tu catálogo:',link);
+ }
+});
+on('#catalogProductList','click',ev=>{
+ const button=ev.target.closest('[data-catalog-edit]');if(!button)return;
+ const row=st.catalogAdmin.find(x=>x.product_id===Number(button.dataset.catalogEdit));
+ if(row)fillCatalogEditor(row);
+});
+on('#catalogUseExisting','click',()=>{
+ const row=st.catalogAdmin.find(x=>x.product_id===st.catalogEditingId);
+ if(!row){toast('Selecciona un producto primero',true);return}
+ if(Number(row.sale_price_existing)<=0){toast('Ese producto todavía no tiene precio de venta registrado',true);return}
+ $('#catalogPriceUnit').value=Number(row.sale_price_existing).toFixed(2);
+ toast('Precio actual copiado solo al editor público. Guarda para confirmar.');
+});
+on('#catalogForm','submit',async ev=>{
+ ev.preventDefault();
+ const id=Number($('#catalogProductId').value);
+ if(!id){toast('Selecciona primero un producto de la lista',true);return}
+ const payload=catalogFormData();
+ if(payload.published&&!payload.price_unit){toast('Indica el precio por unidad antes de publicar',true);return}
+ if((payload.price_case===null)!==(payload.case_units===null)){
+  toast('Para precio por cajón, indica la cantidad de piezas y el precio total',true);return;
+ }
+ const button=$('#catalogSave');
+ button.disabled=true;
+ try{
+  const updated=await api('/catalogo/admin/'+id,{method:'PUT',body:JSON.stringify(payload)});
+  const index=st.catalogAdmin.findIndex(x=>x.product_id===id);
+  if(index>=0)st.catalogAdmin[index]=updated;
+  fillCatalogEditor(updated);
+  toast(updated.published?'Producto publicado en el catálogo para clientes':'Configuración guardada; producto no publicado');
+ }catch(err){toast(err.message,true)}
+ finally{button.disabled=false}
+});
 
 on('#supplierSearch','input',renderSupplier);
 on('#supplierFilter','change',renderSupplier);
