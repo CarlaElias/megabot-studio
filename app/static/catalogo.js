@@ -4,6 +4,7 @@ const $=selector=>document.querySelector(selector);
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=v=>Number(v).toLocaleString('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2});
 const money=v=>'Bs '+fmt(v);
+const normalizeSearch=value=>String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('es').trim();
 const el={
  search:$('#productSearch'),sort:$('#sortProducts'),onlyAvailable:$('#onlyAvailable'),
  nav:$('#categoryNav'),categoryFilters:$('#categoryFilters'),grid:$('#productGrid'),
@@ -161,13 +162,13 @@ function renderCategories(){
   esc(category)+' <span>'+counts[category]+'</span></button>').join('');
 }
 function getVisible(){
- const q=el.search.value.trim().toLocaleLowerCase('es');
+ const q=normalizeSearch(el.search.value);
  let products=state.products.filter(p=>{
   if(isWholesale&&!hasWholesale(p))return false;
   if(state.category!=='Todos'&&p.category!==state.category)return false;
   if((el.onlyAvailable.checked||state.tab==='available')&&!p.available)return false;
   if(state.tab==='wholesale'&&!hasWholesale(p))return false;
-  if(q&&!(p.name+' '+(p.sku||'')+' '+(p.description||'')+' '+(p.category||'')).toLocaleLowerCase('es').includes(q))return false;
+  if(q&&!normalizeSearch(p.name+' '+(p.sku||'')+' '+(p.description||'')+' '+(p.category||'')).includes(q))return false;
   return true;
  });
  if(state.tab==='recent')products=products.sort((a,b)=>b.id-a.id).slice(0,12);
@@ -292,7 +293,60 @@ function restoreOverlay(){
   state.lastFocus?.focus?.();
  }
 }
-el.search.addEventListener('input',()=>{state.page=1;renderCatalog()});
+const searchForm=document.getElementById('catalogSearchForm');
+const suggestions=document.getElementById('searchSuggestions');
+function hideSearchSuggestions(){
+ suggestions.hidden=true;
+ el.search.setAttribute('aria-expanded','false');
+}
+function showSearchSuggestions(){
+ const q=normalizeSearch(el.search.value);
+ if(!q||!state.products.length){hideSearchSuggestions();return}
+ const hits=getVisible();
+ const examples=hits.slice(0,5);
+ suggestions.innerHTML=
+  '<div class="search-suggestions-title">'+hits.length+' producto'+(hits.length===1?'':'s')+' encontrado'+(hits.length===1?'':'s')+'</div>'+
+  (examples.map(p=>'<button type="button" class="search-suggestion-item" data-search-product="'+p.id+'">'+
+   (p.photos?.[0]?'<img src="'+esc(p.photos[0])+'" alt="" loading="lazy">':'<span class="search-suggestion-placeholder">📦</span>')+
+   '<span class="search-suggestion-copy"><strong>'+esc(p.name)+'</strong><small>'+esc(p.sku||'')+'</small></span>'+
+   '<span class="search-suggestion-price">'+money(p.price_unit)+'</span></button>').join('')||
+   '<p class="search-suggestions-empty">No encontramos coincidencias. Prueba otro nombre o código.</p>')+
+  (hits.length>5?'<button type="submit" class="search-suggestions-all">Ver los '+hits.length+' resultados →</button>':'');
+ suggestions.hidden=false;
+ el.search.setAttribute('aria-expanded','true');
+}
+function performCatalogSearch(){
+ state.page=1;
+ renderCatalog();
+ hideSearchSuggestions();
+ document.getElementById('productos')?.scrollIntoView({behavior:'smooth',block:'start'});
+ if(window.matchMedia('(max-width:660px)').matches)el.search.blur();
+}
+el.search.addEventListener('input',()=>{
+ state.page=1;
+ if(normalizeSearch(el.search.value)){
+  state.category='Todos';
+  state.tab='all';
+  renderCategories();
+ }
+ renderCatalog();
+ showSearchSuggestions();
+});
+el.search.addEventListener('focus',showSearchSuggestions);
+searchForm.addEventListener('submit',event=>{event.preventDefault();performCatalogSearch()});
+suggestions.addEventListener('click',event=>{
+ const target=event.target.closest('[data-search-product]');
+ if(!target)return;
+ const id=Number(target.dataset.searchProduct);
+ hideSearchSuggestions();
+ openModal(id);
+});
+document.addEventListener('pointerdown',event=>{
+ if(!searchForm.contains(event.target))hideSearchSuggestions();
+});
+el.search.addEventListener('keydown',event=>{
+ if(event.key==='Escape')hideSearchSuggestions();
+});
 el.sort.addEventListener('change',()=>{state.page=1;renderCatalog()});
 el.onlyAvailable.addEventListener('change',()=>{state.page=1;renderCatalog()});
 for(const node of [el.nav,el.categoryFilters]){
