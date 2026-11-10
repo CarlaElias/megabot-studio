@@ -64,6 +64,20 @@ def test_integrated_flow():
         assert 'id="cartDrawer"' in shop_page.text
         assert 'id="sendOrder"' in shop_page.text
         assert 'id="productGrid"' in shop_page.text
+        # Decoraciones navideñas confinadas a la web pública.
+        assert 'id="christmasBanner"' in shop_page.text
+        assert 'id="christmasSnowToggle"' in shop_page.text
+        assert 'id="christmasSnow"' in shop_page.text
+        assert 'catalogo-navidad.css' in shop_page.text
+        assert 'catalogo-navidad.js' in shop_page.text
+        christmas_js=c.get('/static/catalogo-navidad.js')
+        assert christmas_js.status_code==200
+        assert "prefers-reduced-motion: reduce" in christmas_js.text
+        assert "megacompra-christmas-snow" in christmas_js.text
+        christmas_css=c.get('/static/catalogo-navidad.css')
+        assert christmas_css.status_code==200
+        assert "pointer-events:none" in christmas_css.text
+        assert "@media(prefers-reduced-motion:reduce)" in christmas_css.text
         assert c.get('/static/catalogo.js').status_code==200
         assert 'orderLink()' in c.get('/static/catalogo.js').text
         assert c.get('/static/catalogo.css').status_code==200
