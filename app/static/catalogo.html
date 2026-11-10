@@ -10,7 +10,7 @@
  <link rel="icon" href="/static/megacompra-icon-minimal-192.webp" type="image/webp">
  <link rel="stylesheet" href="/static/catalogo.css?v=2">
  <link rel="stylesheet" href="/static/catalogo-navidad.css?v=1">
- <script defer src="/static/catalogo.js?v=2"></script>
+ <script defer src="/static/catalogo.js?v=3"></script>
  <script defer src="/static/catalogo-navidad.js?v=1"></script>
 </head>
 <body>
@@ -45,6 +45,7 @@
     </button>
    </div>
   </div>
+  <nav aria-label="Tipo de catálogo" style="background:#f5f5f5;border-bottom:1px solid #e6e6e6;padding:10px 5%;display:flex;justify-content:center;gap:12px;flex-wrap:wrap"><a href="/catalogo" id="minorLink" style="padding:9px 20px;border-radius:30px;text-decoration:none;background:#fff;color:#111;border:1px solid #ddd;font-weight:800">🛍️ Por menor</a><a href="/catalogo/mayoristas" id="wholesaleLink" style="padding:9px 20px;border-radius:30px;text-decoration:none;background:#111;color:#fff;border:1px solid #111;font-weight:800">📦 Por mayor</a></nav>
   <nav class="category-nav" aria-label="Categorías de productos">
    <div class="nav-inner" id="categoryNav">
     <button class="nav-item active" data-category="Todos" type="button">Todos los productos</button>
@@ -60,9 +61,9 @@
    <div class="hero-main">
     <div class="christmas-hero-decor" aria-hidden="true"><span class="christmas-ornament christmas-ornament-one">✦</span><span class="christmas-ornament christmas-ornament-two">✷</span><span class="christmas-ornament christmas-ornament-three">✦</span></div>
     <span class="christmas-sleigh" aria-hidden="true">🛷🎅</span>
-    <span class="hero-kicker"><span class="hero-spark">✦</span> CATÁLOGO MEGA COMPRA</span>
-    <h1>Todo lo que buscas,<br><em>a un mejor precio.</em></h1>
-    <p>Precios por unidad, desde 3, por docena y por cajón. Elige tus productos y envíanos tu pedido por WhatsApp.</p>
+    <span class="hero-kicker"><span class="hero-spark">✦</span> <span id="heroKickerText">CATÁLOGO MEGA COMPRA</span></span>
+    <h1 id="heroHeading">Todo lo que buscas,<br><em>a un mejor precio.</em></h1>
+    <p id="heroDescription">Precios por unidad, desde 3, por docena y por cajón. Elige tus productos y envíanos tu pedido por WhatsApp.</p>
     <button class="hero-cta" type="button" id="browseProducts">EXPLORAR PRODUCTOS <span aria-hidden="true">→</span></button>
     <div class="hero-art" aria-hidden="true"><span>MEGA</span><strong>COM<br>PRA</strong></div>
    </div>
@@ -93,14 +94,14 @@
   <section class="catalog-section" id="productos" aria-labelledby="catalogTitle">
    <div class="section-heading catalog-title-row">
     <div><span class="eyebrow">EXPLORA NUESTRO CATÁLOGO</span>
-     <h2 id="catalogTitle">Todos los productos</h2><p>Imágenes, descripción y precios según la cantidad que necesitas.</p></div>
+     <h2 id="catalogTitle">Todos los productos</h2><p id="catalogDescription">Imágenes, descripción y precios según la cantidad que necesitas.</p></div>
     <div id="productCount" class="result-count" aria-live="polite">Cargando…</div>
    </div>
    <div class="catalog-controls">
     <div class="catalog-tabs" role="group" aria-label="Tipo de productos">
      <button type="button" data-tab="all" class="catalog-tab active">Todos</button>
      <button type="button" data-tab="available" class="catalog-tab">Disponibles</button>
-     <button type="button" data-tab="wholesale" class="catalog-tab">Por mayor</button>
+     <a href="/catalogo/mayoristas" class="catalog-tab" style="text-decoration:none">📦 Catálogo mayorista</a>
      <button type="button" data-tab="recent" class="catalog-tab">Novedades</button>
     </div>
     <label class="sort" for="sortProducts">ORDENAR
@@ -113,7 +114,7 @@
      <h3>Categorías</h3><div id="categoryFilters" class="filter-categories" role="group" aria-label="Filtrar por categoría"></div>
      <div class="filter-divider"></div>
      <label class="availability-filter"><input type="checkbox" id="onlyAvailable"> Solo disponibles</label>
-     <div class="sidebar-note"><strong>¿Buscas comprar por mayor?</strong><p>Consulta precios de docena y cajón en cada producto.</p></div>
+     <div class="sidebar-note"><strong>¿Buscas comprar por mayor?</strong><p>Tenemos una sección exclusiva para pedidos por volumen.</p><a href="/catalogo/mayoristas">Ver catálogo mayorista →</a></div>
     </aside>
     <div class="catalog-main">
      <div id="catalogMessage" class="catalog-message" role="status">Cargando catálogo…</div>
