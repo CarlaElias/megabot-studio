@@ -196,18 +196,23 @@ def public_catalog(db:Session=Depends(get_db)):
             } for product,entry in rows]}
 
 @app.get('/catalogo/foto/{photo_id}')
-def public_catalog_photo(photo_id:int,db:Session=Depends(get_db)):
-    photo=db.scalar(
-        select(Photo).join(Product,Photo.product_id==Product.id)
-        .join(CatalogEntry,CatalogEntry.product_id==Product.id)
-        .where(Photo.id==photo_id,Product.active.is_(True),
-               CatalogEntry.published.is_(True),CatalogEntry.price_unit.is_not(None))
-    )
-    if photo is None:raise HTTPException(404,'Fotografía no publicada')
+def public_catalog_photo(photo_id:int):
+    # Soltar la conexión SQL antes de descargar desde Storage. Las fotos pueden
+    # tardar en llegar y mantener sesiones abiertas agotaba el pool bajo carga.
+    with SessionLocal() as db:
+        filename=db.scalar(
+            select(Photo.filename).join(Product,Photo.product_id==Product.id)
+            .join(CatalogEntry,CatalogEntry.product_id==Product.id)
+            .where(Photo.id==photo_id,Product.active.is_(True),
+                   CatalogEntry.published.is_(True),CatalogEntry.price_unit.is_not(None))
+        )
+    if filename is None:
+        raise HTTPException(404,'Fotografía no publicada')
     try:
-        return Response(storage.read(photo.filename,'originales'),media_type='image/jpeg')
+        return Response(storage.read(filename,'originales'),media_type='image/jpeg',
+                        headers={'Cache-Control':'public, max-age=300'})
     except (FileNotFoundError,RuntimeError):
-        raise HTTPException(404,'Fotografía no disponible')
+        raise HTTPException(503,'Fotografía temporalmente no disponible')
 
 @app.get('/sw.js')
 def mobile_service_worker():
