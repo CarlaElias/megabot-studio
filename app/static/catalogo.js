@@ -161,14 +161,24 @@ function renderCategories(){
   '<button type="button" class="'+(category===state.category?'active':'')+'" data-category="'+esc(category)+'">'+
   esc(category)+' <span>'+counts[category]+'</span></button>').join('');
 }
+function matchingSearchProducts(query){
+ const q=normalizeSearch(query);
+ if(!q)return state.products.slice();
+ const tokens=q.split(/\s+/).filter(Boolean);
+ return state.products.filter(p=>{
+  const haystack=normalizeSearch([p.name,p.sku,p.category,p.description].filter(Boolean).join(' '));
+  return tokens.every(token=>haystack.includes(token));
+ });
+}
 function getVisible(){
  const q=normalizeSearch(el.search.value);
+ const matchingIds=q?new Set(matchingSearchProducts(q).map(p=>p.id)):null;
  let products=state.products.filter(p=>{
   if(isWholesale&&!hasWholesale(p))return false;
   if(state.category!=='Todos'&&p.category!==state.category)return false;
   if((el.onlyAvailable.checked||state.tab==='available')&&!p.available)return false;
   if(state.tab==='wholesale'&&!hasWholesale(p))return false;
-  if(q&&!normalizeSearch(p.name+' '+(p.sku||'')+' '+(p.description||'')+' '+(p.category||'')).includes(q))return false;
+  if(matchingIds&&!matchingIds.has(p.id))return false;
   return true;
  });
  if(state.tab==='recent')products=products.sort((a,b)=>b.id-a.id).slice(0,12);
@@ -221,6 +231,12 @@ function renderPagination(total){
 }
 function renderCatalog(){
  const visible=getVisible();
+ const notice=document.getElementById('catalogSearchNotice');
+ const phrase=el.search.value.trim();
+ if(notice){
+  notice.hidden=!phrase;
+  if(phrase)notice.textContent=visible.length+' resultado'+(visible.length===1?'':'s')+' para «'+phrase+'»'+(isWholesale?' en productos mayoristas':' en productos por menor');
+ }
  const maxPages=Math.max(1,Math.ceil(visible.length/state.pageSize));
  state.page=Math.min(state.page,maxPages);
  const items=visible.slice((state.page-1)*state.pageSize,state.page*state.pageSize);
@@ -230,7 +246,7 @@ function renderCatalog(){
  if(!items.length){
   el.message.innerHTML=state.products.length?
    '<strong>Sin resultados</strong>Prueba otra búsqueda o selecciona una categoría diferente.':
-   '<strong>Estamos preparando el catálogo de Mega Compra</strong>Muy pronto podrás consultar imágenes, disponibilidad y precios por unidad, desde 3, docena y cajón.';
+   (isWholesale?'<strong>Aún no hay productos mayoristas publicados.</strong>Los precios por volumen se configurarán desde MegaBot. Puedes comprar por unidad en el catálogo por menor.':'<strong>Estamos preparando el catálogo de Mega Compra</strong>Muy pronto podrás consultar imágenes, disponibilidad y precios por unidad, desde 3, docena y cajón.');
  }
  renderPagination(visible.length);
  document.querySelectorAll('.catalog-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===state.tab));
@@ -295,15 +311,23 @@ function restoreOverlay(){
 }
 const searchForm=document.getElementById('catalogSearchForm');
 const suggestions=document.getElementById('searchSuggestions');
+const searchLiveStatus=document.getElementById('searchLiveStatus');
+function setSearchStatus(value){
+ if(!searchLiveStatus)return;
+ searchLiveStatus.textContent=value;
+ searchLiveStatus.hidden=!value;
+}
 function hideSearchSuggestions(){
  suggestions.hidden=true;
+ setSearchStatus('');
  el.search.setAttribute('aria-expanded','false');
 }
 function showSearchSuggestions(){
  const q=normalizeSearch(el.search.value);
  if(!q||!state.products.length){hideSearchSuggestions();return}
- const hits=getVisible();
- const examples=hits.slice(0,5);
+ const hits=matchingSearchProducts(q);
+ const examples=hits.slice(0,6);
+ setSearchStatus(hits.length?'Encontrados: '+hits.length:'Sin coincidencias');
  suggestions.innerHTML=
   '<div class="search-suggestions-title">'+hits.length+' producto'+(hits.length===1?'':'s')+' encontrado'+(hits.length===1?'':'s')+'</div>'+
   (examples.map(p=>'<button type="button" class="search-suggestion-item" data-search-product="'+p.id+'">'+
@@ -311,12 +335,16 @@ function showSearchSuggestions(){
    '<span class="search-suggestion-copy"><strong>'+esc(p.name)+'</strong><small>'+esc(p.sku||'')+'</small></span>'+
    '<span class="search-suggestion-price">'+money(p.price_unit)+'</span></button>').join('')||
    '<p class="search-suggestions-empty">No encontramos coincidencias. Prueba otro nombre o código.</p>')+
-  (hits.length>5?'<button type="submit" class="search-suggestions-all">Ver los '+hits.length+' resultados →</button>':'');
+  (hits.length>6?'<button type="submit" class="search-suggestions-all">Ver los '+hits.length+' resultados →</button>':'');
  suggestions.hidden=false;
  el.search.setAttribute('aria-expanded','true');
 }
 function performCatalogSearch(){
  state.page=1;
+ state.category='Todos';
+ state.tab='all';
+ el.onlyAvailable.checked=false;
+ renderCategories();
  renderCatalog();
  hideSearchSuggestions();
  document.getElementById('productos')?.scrollIntoView({behavior:'smooth',block:'start'});
@@ -327,6 +355,7 @@ el.search.addEventListener('input',()=>{
  if(normalizeSearch(el.search.value)){
   state.category='Todos';
   state.tab='all';
+  el.onlyAvailable.checked=false;
   renderCategories();
  }
  renderCatalog();
@@ -449,6 +478,7 @@ async function loadCatalog(){
   state.cart=readCart();
   sanitizeCart();
   initWhatsApp();renderCategories();renderArrivals();renderCatalog();renderCart();
+  if(el.search.value.trim())showSearchSuggestions();
  }catch(e){
   console.error('Error cargando catálogo',e);
   el.result.textContent='Sin conexión';
@@ -473,6 +503,7 @@ function initializeMode(){
  document.querySelector('#heroDescription').textContent='Precios especiales por volumen, docena y cajón. Selecciona tus productos y consulta tu pedido por WhatsApp.';
  document.querySelector('#catalogTitle').textContent='Productos por mayor';
  document.querySelector('#catalogDescription').textContent='Solo productos con precios mayoristas configurados.';
+ if(!state.products.length)document.querySelector('#catalogDescription').textContent='Los productos aparecerán aquí cuando configures precios mayoristas en MegaBot.';
  document.querySelectorAll('.catalog-tab').forEach(x=>{if(x.dataset.tab==='available'||x.dataset.tab==='recent')return;if(x.dataset.tab==='all')x.textContent='Todos los mayoristas';});
  const side=document.querySelector('.sidebar-note');if(side)side.innerHTML='<strong>¿Quieres comprar una sola unidad?</strong><p>Visita nuestro catálogo minorista.</p><a href="/catalogo">Ver catálogo por menor →</a>';
 }
