@@ -58,6 +58,20 @@ def test_integrated_flow():
         # El catálogo de clientes no publica nada sin autorización explícita.
         shop_page=c.get('/catalogo')
         assert shop_page.status_code==200
+        # Nueva identidad visual del catálogo y app, sin cambiar datos.
+        assert 'megacompra-icon-minimal-192.webp' in shop_page.text
+        assert 'precios bajos' in shop_page.text
+        icon=c.get('/static/megacompra-icon-minimal-192.webp')
+        assert icon.status_code==200
+        assert icon.headers['content-type'].startswith('image/webp')
+        assert icon.content[:4]==b'RIFF'
+        assert c.get('/static/megacompra-icon-minimal.svg').status_code==200
+        app_index=c.get('/')
+        assert app_index.status_code==200
+        assert 'megacompra-icon-minimal-192.webp' in app_index.text
+        manifest=c.get('/static/manifest.webmanifest').json()
+        assert any(icon_data['src']=='/static/megacompra-icon-minimal-192.webp'
+                   for icon_data in manifest['icons'])
         assert 'id="categoryNav"' in shop_page.text
         assert 'id="productSearch"' in shop_page.text
         assert 'id="newArrivals"' in shop_page.text
