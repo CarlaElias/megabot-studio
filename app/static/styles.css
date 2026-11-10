@@ -269,3 +269,14 @@ input,textarea,select{background:color-mix(in srgb,var(--bg) 75%,var(--surface))
 .catalog-flag input{width:18px;height:18px;flex:0 0 18px;accent-color:var(--accent-strong)}
 @media(max-width:1100px){.catalog-manager-layout{grid-template-columns:1fr}.catalog-editor-panel{position:static}.catalog-product-list{max-height:400px}}
 @media(max-width:680px){.catalog-manager-search{flex-direction:column}.catalog-tier-inputs{grid-template-columns:1fr}.catalog-list-photo{width:52px;height:52px;flex-basis:52px}.catalog-list-item>.mini{flex:1 1 100%}.catalog-editor-panel{scroll-margin-top:14px}}
+
+/* Nueva identidad visual Mega Compra en el acceso privado. */
+.login-logo{border-radius:18px;background:#fff;padding:6px;box-shadow:0 10px 30px #0003;filter:none!important;
+ width:130px;height:130px;object-fit:contain}
+.login-brand-wordmark{font-size:24px;font-weight:950;letter-spacing:-1.2px;line-height:1.1;
+ color:#fff;margin:10px auto 4px}
+.login-brand-wordmark span{color:#ff3854}
+.login-brand-tagline{display:table;margin:0 auto 15px;padding:4px 15px;border-radius:30px;
+ background:#e31d37;color:white;font-size:13px;font-style:italic;font-weight:800;line-height:1.2}
+.sidebar .brand img{border-radius:12px;background:#fff;padding:2px}
+.hero-logo img{border-radius:18px;background:white;padding:6px;max-width:80%;max-height:80%}
