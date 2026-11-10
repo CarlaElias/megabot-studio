@@ -98,6 +98,11 @@ def home(): return FileResponse(ROOT/'app'/'static'/'index.html')
 def customer_catalog():
     return FileResponse(ROOT/'app'/'static'/'catalogo.html')
 
+@app.get('/catalogo/mayoristas')
+def wholesale_customer_catalog():
+    """Escaparate mayorista, conectado a los productos del catálogo público."""
+    return FileResponse(ROOT/'app'/'static'/'catalogo.html')
+
 class CatalogPublishInput(BaseModel):
     published: bool = False
     available: bool = True
