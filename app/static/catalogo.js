@@ -405,6 +405,12 @@ async function loadCatalog(){
  }
 }
 function initializeMode(){
+ const activeLink=document.getElementById(isWholesale?'wholesaleLink':'minorLink');
+ const otherLink=document.getElementById(isWholesale?'minorLink':'wholesaleLink');
+ activeLink?.classList.add('active');
+ activeLink?.setAttribute('aria-current','page');
+ otherLink?.classList.remove('active');
+ otherLink?.removeAttribute('aria-current');
  if(!isWholesale)return;
  document.title='Mega Compra | Catálogo mayorista';
  document.querySelector('meta[name="description"]')?.setAttribute('content','Mega Compra Bolivia: catálogo exclusivo para compras desde 3 unidades, por docena y por cajón.');
@@ -413,13 +419,8 @@ function initializeMode(){
  document.querySelector('#heroDescription').textContent='Precios especiales por volumen, docena y cajón. Selecciona tus productos y consulta tu pedido por WhatsApp.';
  document.querySelector('#catalogTitle').textContent='Productos por mayor';
  document.querySelector('#catalogDescription').textContent='Solo productos con precios mayoristas configurados.';
- document.querySelector('#wholesaleLink').style.background='#b91925';
- document.querySelector('#wholesaleLink').style.borderColor='#b91925';
- document.querySelector('#minorLink').style.background='#fff';
- document.querySelector('#minorLink').style.color='#111';
  document.querySelectorAll('.catalog-tab').forEach(x=>{if(x.dataset.tab==='available'||x.dataset.tab==='recent')return;if(x.dataset.tab==='all')x.textContent='Todos los mayoristas';});
  const side=document.querySelector('.sidebar-note');if(side)side.innerHTML='<strong>¿Quieres comprar una sola unidad?</strong><p>Visita nuestro catálogo minorista.</p><a href="/catalogo">Ver catálogo por menor →</a>';
- document.querySelector('.footer p')?.textContent;
 }
 initializeMode();
 loadCatalog();
