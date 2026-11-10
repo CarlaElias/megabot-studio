@@ -8,9 +8,9 @@
  <meta name="robots" content="index,follow">
  <title>Mega Compra | Catálogo por mayor y menor</title>
  <link rel="icon" href="/static/megacompra-icon-minimal-192.webp" type="image/webp">
- <link rel="stylesheet" href="/static/catalogo.css?v=2">
+ <link rel="stylesheet" href="/static/catalogo.css?v=4">
  <link rel="stylesheet" href="/static/catalogo-navidad.css?v=1">
- <script defer src="/static/catalogo.js?v=3"></script>
+ <script defer src="/static/catalogo.js?v=4"></script>
  <script defer src="/static/catalogo-navidad.js?v=1"></script>
 </head>
 <body>
@@ -45,7 +45,21 @@
     </button>
    </div>
   </div>
-  <nav aria-label="Tipo de catálogo" style="background:#f5f5f5;border-bottom:1px solid #e6e6e6;padding:10px 5%;display:flex;justify-content:center;gap:12px;flex-wrap:wrap"><a href="/catalogo" id="minorLink" style="padding:9px 20px;border-radius:30px;text-decoration:none;background:#fff;color:#111;border:1px solid #ddd;font-weight:800">🛍️ Por menor</a><a href="/catalogo/mayoristas" id="wholesaleLink" style="padding:9px 20px;border-radius:30px;text-decoration:none;background:#111;color:#fff;border:1px solid #111;font-weight:800">📦 Por mayor</a></nav>
+  <nav class="holiday-catalog-nav" aria-label="Seleccionar catálogo">
+   <div class="holiday-catalog-switch">
+    <span class="holiday-catalog-snow snow-one" aria-hidden="true">❄</span>
+    <span class="holiday-catalog-snow snow-two" aria-hidden="true">✦</span>
+    <span class="holiday-catalog-snow snow-three" aria-hidden="true">❅</span>
+    <a href="/catalogo" id="minorLink" class="holiday-catalog-link" aria-label="Catálogo por menor, compra desde una unidad">
+     <span class="holiday-catalog-icon" aria-hidden="true">🛍️</span>
+     <span class="holiday-catalog-copy"><strong>Por menor</strong><small>Desde 1 unidad</small></span>
+    </a>
+    <a href="/catalogo/mayoristas" id="wholesaleLink" class="holiday-catalog-link" aria-label="Catálogo por mayor, desde tres unidades, docena y cajón">
+     <span class="holiday-catalog-icon" aria-hidden="true">📦</span>
+     <span class="holiday-catalog-copy"><strong>Por mayor</strong><small>Por cantidad y cajón</small></span>
+    </a>
+   </div>
+  </nav>
   <nav class="category-nav" aria-label="Categorías de productos">
    <div class="nav-inner" id="categoryNav">
     <button class="nav-item active" data-category="Todos" type="button">Todos los productos</button>
