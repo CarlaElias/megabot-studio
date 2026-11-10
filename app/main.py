@@ -13,7 +13,7 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import Session, selectinload
 from PIL import Image, ImageOps, UnidentifiedImageError
 from .models import (ROOT,DATA,SessionLocal,init_db,now,Admin,LoginSession,Product,Photo,
-                     Sale,SaleLine,Delivery,Notification,GenerationJob,GeneratedImage,Audit,PushSubscription,PaymentRecord,WholesaleProfile,BranchStock,BranchTransfer,SupplierCatalogUpdate,SupplierAlert)
+                     Sale,SaleLine,Delivery,Notification,GenerationJob,GeneratedImage,Audit,PushSubscription,PaymentRecord,WholesaleProfile,BranchStock,BranchTransfer,SupplierCatalogUpdate,SupplierAlert,CatalogEntry)
 from .security import (authenticated,check_csrf,resolve,hash_token,new_login,login_allowed,failed_login,verify_pass)
 from .worker import worker_loop,FILES
 from .excel_export import products_excel
@@ -91,6 +91,117 @@ def audit(db,user,action,detail=''):
 
 @app.get('/')
 def home(): return FileResponse(ROOT/'app'/'static'/'index.html')
+
+# El escaparate comparte productos con MegaBot pero mantiene precios y publicación
+# independientes. La API pública NO entrega costos, inventario interno ni proveedor.
+@app.get('/catalogo')
+def customer_catalog():
+    return FileResponse(ROOT/'app'/'static'/'catalogo.html')
+
+class CatalogPublishInput(BaseModel):
+    published: bool = False
+    available: bool = True
+    available_units: int | None = Field(default=None,ge=0,le=1000000)
+    price_unit: Decimal | None = Field(default=None,gt=0,le=9999999999)
+    price_three: Decimal | None = Field(default=None,gt=0,le=9999999999)
+    price_dozen: Decimal | None = Field(default=None,gt=0,le=9999999999)
+    price_case: Decimal | None = Field(default=None,gt=0,le=9999999999)
+    case_units: int | None = Field(default=None,ge=2,le=100000)
+
+def catalog_admin_row(product,entry):
+    return {
+        'product_id':product.id,'sku':product.sku,'name':product.name,
+        'category':product.category,'description':product.description,
+        'sale_price_existing':float(product.sale_price),
+        'own_stock':product.stock,
+        'photos':[{'id':ph.id,'url':f'/api/photos/{ph.id}'} for ph in product.photos],
+        'published':bool(entry.published) if entry else False,
+        'available':bool(entry.available) if entry else True,
+        'available_units':entry.available_units if entry else None,
+        'price_unit':float(entry.price_unit) if entry and entry.price_unit is not None else None,
+        'price_three':float(entry.price_three) if entry and entry.price_three is not None else None,
+        'price_dozen':float(entry.price_dozen) if entry and entry.price_dozen is not None else None,
+        'price_case':float(entry.price_case) if entry and entry.price_case is not None else None,
+        'case_units':entry.case_units if entry else None
+    }
+
+@app.get('/api/catalogo/admin')
+def catalog_admin_products(user=Depends(authenticated),db:Session=Depends(get_db)):
+    rows=db.execute(
+        select(Product,CatalogEntry).outerjoin(CatalogEntry,CatalogEntry.product_id==Product.id)
+        .options(selectinload(Product.photos)).order_by(Product.id.desc())
+    ).all()
+    return [catalog_admin_row(product,entry) for product,entry in rows]
+
+@app.put('/api/catalogo/admin/{product_id}')
+async def publish_catalog_product(product_id:int,data:CatalogPublishInput,
+                                  user=Depends(check_csrf),db:Session=Depends(get_db)):
+    product=db.scalar(select(Product).where(Product.id==product_id).options(selectinload(Product.photos)))
+    if not product:raise HTTPException(404,'Producto no encontrado')
+    if data.published:
+        if not product.active:raise HTTPException(422,'Activa el producto antes de publicarlo')
+        if not product.photos:raise HTTPException(422,'Agrega una fotografía en MegaBot antes de publicarlo')
+        if data.price_unit is None:raise HTTPException(422,'El precio por unidad es obligatorio para publicar')
+    if (data.price_case is None)!=(data.case_units is None):
+        raise HTTPException(422,'Para precio por cajón, especifica precio total y unidades por cajón')
+    entry=db.get(CatalogEntry,product_id)
+    if entry is None:
+        entry=CatalogEntry(product_id=product_id)
+        db.add(entry)
+    entry.published=data.published
+    entry.available=data.available
+    entry.available_units=data.available_units
+    for key in ('price_unit','price_three','price_dozen','price_case'):
+        value=getattr(data,key)
+        setattr(entry,key,money(value) if value is not None else None)
+    entry.case_units=data.case_units
+    entry.updated_at=datetime.now(timezone.utc)
+    audit(db,user,'catalog.publish',f'{product.sku}: {"publicado" if entry.published else "oculto"}')
+    db.commit()
+    await broadcast()
+    return catalog_admin_row(product,entry)
+
+@app.get('/api/catalogo/publico')
+def public_catalog(db:Session=Depends(get_db)):
+    """Información pública exclusivamente: sin purchase_cost, supplier_stock o datos internos."""
+    rows=db.execute(
+        select(Product,CatalogEntry)
+        .join(CatalogEntry,CatalogEntry.product_id==Product.id)
+        .where(Product.active.is_(True),CatalogEntry.published.is_(True),
+               CatalogEntry.price_unit.is_not(None))
+        .options(selectinload(Product.photos)).order_by(Product.id.desc())
+        .limit(400)
+    ).all()
+    return {'currency':'BOB','store':'Mega Compra',
+            'whatsapp':'59165129194',
+            'products':[{
+                'id':product.id,
+                'name':product.name,
+                'category':product.category,
+                'description':product.description,
+                'available':bool(entry.available) and (entry.available_units is None or entry.available_units>0),
+                'available_units':entry.available_units,
+                'price_unit':float(entry.price_unit),
+                'price_three':float(entry.price_three) if entry.price_three is not None else None,
+                'price_dozen':float(entry.price_dozen) if entry.price_dozen is not None else None,
+                'price_case':float(entry.price_case) if entry.price_case is not None else None,
+                'case_units':entry.case_units,
+                'photos':[f'/catalogo/foto/{photo.id}' for photo in product.photos[:6]]
+            } for product,entry in rows]}
+
+@app.get('/catalogo/foto/{photo_id}')
+def public_catalog_photo(photo_id:int,db:Session=Depends(get_db)):
+    photo=db.scalar(
+        select(Photo).join(Product,Photo.product_id==Product.id)
+        .join(CatalogEntry,CatalogEntry.product_id==Product.id)
+        .where(Photo.id==photo_id,Product.active.is_(True),
+               CatalogEntry.published.is_(True),CatalogEntry.price_unit.is_not(None))
+    )
+    if photo is None:raise HTTPException(404,'Fotografía no publicada')
+    try:
+        return Response(storage.read(photo.filename,'originales'),media_type='image/jpeg')
+    except (FileNotFoundError,RuntimeError):
+        raise HTTPException(404,'Fotografía no disponible')
 
 @app.get('/sw.js')
 def mobile_service_worker():
