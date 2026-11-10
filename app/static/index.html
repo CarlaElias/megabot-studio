@@ -2,7 +2,7 @@
 <div id="setup" class="login-bg hidden"><div class="login-card setup-card"><img src="/static/megacompra-logo.webp" alt="Mega Compra" class="login-logo"><div class="eyebrow">PRIMER ACCESO SEGURO</div><h1>Activa <span>MegaBot</span></h1><p>Crea tu cuenta principal. Después podrás registrar a los otros dos administradores dentro del panel.</p><form id="setupForm"><label>Código privado de instalación<input id="setupToken" type="password" autocomplete="off" required></label><label>Tu usuario<input id="setupUsername" minlength="3" required></label><label>Nombre visible<input id="setupDisplay" required></label><label>Contraseña (12 caracteres como mínimo)<input id="setupPassword" type="password" minlength="12" autocomplete="new-password" required></label><button class="btn primary wide">Activar cuenta principal →</button><small id="setupError" class="error"></small></form><div class="login-foot">El código se utiliza una sola vez y no debe compartirse.</div></div></div>
 <div id="login" class="login-bg"><div class="login-card"><img src="/static/megacompra-logo.webp" alt="Mega Compra" class="login-logo"><div class="eyebrow">PLATAFORMA PRIVADA</div><h1>MEGA<span>BOT</span></h1><p>Tu centro inteligente de inventario, ventas y contenido.</p><form id="loginForm"><label>Usuario de administrador<input name="username" autocomplete="username" required></label><label>Contraseña<input name="password" type="password" autocomplete="current-password" required></label><button class="btn primary wide">Entrar a MegaBot <span>→</span></button></form><small id="loginError" class="error"></small><div class="login-foot">Acceso exclusivo para los 3 administradores autorizados.</div>
 <div class="pwa-login-install hidden" id="pwaLoginInstall"><button type="button" class="btn secondary wide pwa-install-button" data-install-pwa>📲 Instalar MegaBot en mi Android</button><small>Accede con un ícono en la pantalla de inicio de tu POCO.</small></div></div></div>
-<div id="shell" class="shell hidden"><aside class="sidebar"><div class="brand"><img src="/static/megacompra-logo.webp" alt="Mega Compra"><div><strong>MEGA<span>BOT</span></strong><small>CONTROL CENTER</small></div></div><div class="menu-label">ESPACIO DE TRABAJO</div><nav id="nav"><button data-page="dashboard" class="nav active">◈ <span>Panel principal</span></button><button data-page="products" class="nav">▤ <span>Tienda · por menor</span></button><button data-page="wholesale" class="nav">▦ <span>Mayoristas · por mayor</span></button><button data-page="inventory" class="nav">▤ <span>Inventario general</span></button><button data-page="supplier" class="nav">▧ <span>Catálogo importadora</span></button><button data-page="supplier-alerts" class="nav supplier-alert-nav">🔔 <span>Alertas importadora</span><strong id="supplierAlertNavCount" class="supplier-alert-nav-count hidden">0</strong></button><button data-page="branch" class="nav">⌂ <span>Sucursal La Paz</span></button><button data-page="sales" class="nav">◉ <span>Ventas y ganancias</span></button><button data-page="deliveries" class="nav">▦ <span>Entregas y agenda</span></button><button data-page="studio" class="nav">✦ <span>Estudio IA • 50 imágenes</span></button><button data-page="ads" class="nav">◫ <span>Facebook y TikTok</span></button><button data-page="activity" class="nav">☷ <span>Actividad y seguridad</span></button></nav><div class="side-end"><div class="online-dot">● <span>Sesión privada y sincronizada</span></div><button id="logout" class="ghost">Cerrar sesión ↗</button></div></aside>
+<div id="shell" class="shell hidden"><aside class="sidebar"><div class="brand"><img src="/static/megacompra-logo.webp" alt="Mega Compra"><div><strong>MEGA<span>BOT</span></strong><small>CONTROL CENTER</small></div></div><div class="menu-label">ESPACIO DE TRABAJO</div><nav id="nav"><button data-page="dashboard" class="nav active">◈ <span>Panel principal</span></button><button data-page="products" class="nav">▤ <span>Tienda · por menor</span></button><button data-page="wholesale" class="nav">▦ <span>Mayoristas · por mayor</span></button><button data-page="inventory" class="nav">▤ <span>Inventario general</span></button><button data-page="catalog-editor" class="nav">🛍 <span>Catálogo público · Menor y mayor</span></button><button data-page="supplier" class="nav">▧ <span>Catálogo importadora</span></button><button data-page="supplier-alerts" class="nav supplier-alert-nav">🔔 <span>Alertas importadora</span><strong id="supplierAlertNavCount" class="supplier-alert-nav-count hidden">0</strong></button><button data-page="branch" class="nav">⌂ <span>Sucursal La Paz</span></button><button data-page="sales" class="nav">◉ <span>Ventas y ganancias</span></button><button data-page="deliveries" class="nav">▦ <span>Entregas y agenda</span></button><button data-page="studio" class="nav">✦ <span>Estudio IA • 50 imágenes</span></button><button data-page="ads" class="nav">◫ <span>Facebook y TikTok</span></button><button data-page="activity" class="nav">☷ <span>Actividad y seguridad</span></button></nav><div class="side-end"><div class="online-dot">● <span>Sesión privada y sincronizada</span></div><button id="logout" class="ghost">Cerrar sesión ↗</button></div></aside>
 <div class="main"><header class="topbar"><div><button id="menuToggle" class="hamb">☰</button><span class="breadcrumb">Mega Compra / <span id="crumb">Panel principal</span></span></div><div class="top-right"><label class="theme-picker"><span>Apariencia</span><select id="themeSelect" aria-label="Cambiar apariencia"><option value="royal">Obsidiana & oro</option><option value="violet">Índigo & lavanda</option><option value="ocean">Azul & turquesa</option><option value="emerald">Esmeralda & cobre</option></select></label><span id="conn" class="conn">● Conectando</span><button id="notificationBtn" class="bell" title="Notificaciones">♧ <i id="bellCount"></i></button><div class="avatar" id="adminAvatar">A</div><span class="adminName" id="adminName">Administrador</span></div></header>
 <main>
 <div class="pwa-install-banner hidden" id="pwaInstallBanner"><div><strong>📱 MegaBot para Android</strong><small>Instala la app en tu teléfono y conserva tus datos sincronizados.</small></div><button type="button" class="btn secondary pwa-install-button" data-install-pwa>Instalar aplicación</button></div>
@@ -44,6 +44,72 @@
   <strong>Qué hace MegaBot y qué decides tú</strong>
   <p>Estas alertas aparecen cuando registramos cambios del catálogo de la importadora en MegaBot. No significa que la tienda tenga esas unidades físicamente ni que tus publicaciones de Facebook se modifiquen solas.</p>
   <p>Una alerta de <b>agotado en importadora</b> no bloquea la venta de tus propias existencias. Marca la alerta como revisada después de gestionar tu publicación o comprobar el stock.</p>
+ </div>
+</section>
+
+<section class="page hidden" id="page-catalog-editor">
+ <div class="pagehead">
+  <div>
+   <div class="eyebrow">CATÁLOGO PARA CLIENTES</div>
+   <h1>Catálogo público · Por menor y mayor</h1>
+   <p>Elige los productos que verá el público. Configura precios por unidad, desde 3, docena y cajón, sin mostrar tus costos de compra ni información del proveedor.</p>
+  </div>
+  <div class="page-actions">
+   <a class="btn secondary" target="_blank" rel="noopener" href="/catalogo">↗ Ver catálogo público</a>
+   <button class="btn secondary" id="catalogCopyLink" type="button">Copiar enlace</button>
+  </div>
+ </div>
+ <div class="inventory-summary" id="catalogStats"></div>
+ <div class="two-col catalog-manager-layout">
+  <div class="panel">
+   <div class="panel-top"><div><h2>Productos de MegaBot</h2><p class="dim">Solo se publican cuando tú lo autorizas.</p></div><button type="button" class="mini" id="catalogReload">↻ Actualizar</button></div>
+   <div class="catalog-manager-search">
+    <input id="catalogFind" type="search" placeholder="Buscar producto o código...">
+    <select id="catalogVisibility" aria-label="Filtrar productos por publicación">
+     <option value="all">Todos los productos</option>
+     <option value="published">Publicados</option>
+     <option value="hidden">No publicados</option>
+    </select>
+   </div>
+   <p class="dim" id="catalogListSummary">Cargando tus productos…</p>
+   <div id="catalogProductList" class="stack catalog-product-list"></div>
+  </div>
+  <div class="panel catalog-editor-panel" id="catalogEditorPanel">
+   <h2>Configurar precios al público</h2>
+   <p class="dim" id="catalogSelectedLabel">Selecciona un producto de la lista.</p>
+   <form id="catalogForm">
+    <input type="hidden" id="catalogProductId">
+    <div id="catalogSelectedPhoto" class="catalog-selected-photo"></div>
+    <div class="catalog-tier-inputs">
+     <label>Precio por unidad (Bs)
+      <input type="number" id="catalogPriceUnit" step="0.01" min="0.01" placeholder="Ej.: 70.00">
+     </label>
+     <label>Precio por unidad desde 3 (Bs)
+      <input type="number" id="catalogPriceThree" step="0.01" min="0.01" placeholder="Ej.: 65.00">
+     </label>
+     <label>Precio por unidad por docena (Bs)
+      <input type="number" id="catalogPriceDozen" step="0.01" min="0.01" placeholder="Ej.: 59.00">
+     </label>
+     <label>Unidades por cajón
+      <input type="number" id="catalogCaseUnits" min="2" step="1" placeholder="Ej.: 24">
+     </label>
+     <label>Precio TOTAL del cajón (Bs)
+      <input type="number" id="catalogPriceCase" step="0.01" min="0.01" placeholder="Ej.: 1200.00">
+     </label>
+     <label>Unidades que deseas mostrar al público (opcional)
+      <input type="number" id="catalogDisplayUnits" min="0" step="1" placeholder="Vacío = solo Disponible">
+     </label>
+    </div>
+    <div class="catalog-editor-hint">
+     <small id="catalogUnitHint">El precio por unidad es independiente del costo proveedor.</small>
+     <small id="catalogCaseHint">El precio de cajón es el total, no el precio por pieza.</small>
+    </div>
+    <label class="catalog-flag"><input id="catalogAvailable" type="checkbox" checked> Disponible para consultas y pedidos</label>
+    <label class="catalog-flag"><input id="catalogPublish" type="checkbox"> Publicar este artículo en el catálogo visible para todos</label>
+    <button class="btn primary wide" type="submit" id="catalogSave">Guardar configuración del catálogo</button>
+    <p class="dim">Para publicar, el artículo debe tener al menos una fotografía y un precio unitario. Las ventas, tus precios de MegaBot y el inventario físico no cambian aquí.</p>
+   </form>
+  </div>
  </div>
 </section>
 <section class="page hidden" id="page-supplier">
