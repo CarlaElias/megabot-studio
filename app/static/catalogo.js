@@ -14,7 +14,9 @@ const el={
  cartTotal:$('#cartTotal'),sendOrder:$('#sendOrder'),toast:$('#toast'),
  contact:$('#headerWhatsapp'),bottomWhatsapp:$('#bottomWhatsapp')
 };
-const storageKey='megacompra-catalog-cart-v2';
+const isWholesale=location.pathname.replace(/\/$/,'')==='/catalogo/mayoristas';
+const hasWholesale=p=>p.price_three!==null&&Number(p.price_three)>0||p.price_dozen!==null&&Number(p.price_dozen)>0||p.price_case!==null&&Number(p.price_case)>0&&Number.isInteger(p.case_units)&&p.case_units>=2;
+const storageKey=isWholesale?'megacompra-wholesale-cart-v1':'megacompra-catalog-cart-v2';
 const state={products:[],category:'Todos',tab:'all',page:1,pageSize:16,whatsapp:'',cart:[],lastFocus:null,open:null};
 function readCart(){
  try{
@@ -47,7 +49,8 @@ function tiers(p){
  });
  return out;
 }
-function getTier(p,id){return tiers(p).find(t=>t.id===id)}
+function allowedTiers(p){return tiers(p).filter(t=>!isWholesale||t.id!=='unit')}
+function getTier(p,id){return allowedTiers(p).find(t=>t.id===id)}
 function unitCount(id){
  return state.cart.reduce((total,x)=>{
   if(x.id!==id)return total;
@@ -77,8 +80,9 @@ function sanitizeCart(){
  }).filter(x=>x.packs>0);
  saveCart();
 }
-function addToCart(id,tierId='unit',packs=1){
- const p=getProduct(id),tier=p?getTier(p,tierId):null;
+function addToCart(id,tierId=isWholesale?'three':'unit',packs=1){
+ const p=getProduct(id);if(isWholesale&&p&&tierId==='three'&&!getTier(p,'three'))tierId=allowedTiers(p)[0]?.id;
+ const tier=p?getTier(p,tierId):null;
  if(!p||!tier){toast('Esta presentación no está disponible.');return false}
  if(!canAdd(p,tier,packs)){toast('La cantidad solicitada supera la disponibilidad publicada.');return false}
  const line=state.cart.find(x=>x.id===id&&x.tier===tierId);
@@ -159,9 +163,10 @@ function renderCategories(){
 function getVisible(){
  const q=el.search.value.trim().toLocaleLowerCase('es');
  let products=state.products.filter(p=>{
+  if(isWholesale&&!hasWholesale(p))return false;
   if(state.category!=='Todos'&&p.category!==state.category)return false;
   if((el.onlyAvailable.checked||state.tab==='available')&&!p.available)return false;
-  if(state.tab==='wholesale'&&!(p.price_three!==null||p.price_dozen!==null||p.price_case!==null))return false;
+  if(state.tab==='wholesale'&&!hasWholesale(p))return false;
   if(q&&!(p.name+' '+(p.sku||'')+' '+(p.description||'')+' '+(p.category||'')).toLocaleLowerCase('es').includes(q))return false;
   return true;
  });
@@ -174,6 +179,7 @@ function getVisible(){
 function card(p,isRecent=false){
  const photo=p.photos?.[0];
  const opts=tiers(p).filter(t=>t.id!=='unit');
+ const first=opts[0];
  const stock=p.available?(p.available_units===null?'DISPONIBLE':p.available_units+' DISPONIBLES'):'AGOTADO';
  return '<article class="product-card">'+
    '<button type="button" class="product-photo" data-detail="'+p.id+'" aria-label="Ver '+esc(p.name)+'">'+
@@ -185,20 +191,20 @@ function card(p,isRecent=false){
     '<small class="product-sku">COD: '+esc(p.sku||'#'+p.id)+'</small>'+
     '<h3 class="product-title">'+esc(p.name)+'</h3>'+
     '<p class="product-description">'+esc(p.description||'Consulta las características y presentaciones disponibles.')+'</p>'+
-    '<div class="product-prices"><div class="unit-label">PRECIO POR UNIDAD</div>'+
-    '<div class="unit-price"><small>Bs</small> '+fmt(p.price_unit)+'</div>'+
+    '<div class="product-prices"><div class="unit-label">'+(isWholesale?'PRECIO MAYORISTA':'PRECIO POR UNIDAD')+'</div>'+
+    '<div class="unit-price"><small>Bs</small> '+fmt(isWholesale&&first?first.pricePerUnit:p.price_unit)+'</div>'+
     (opts.length?opts.map(t=>'<div class="price-tier '+(t.id==='case'?'case':'')+'"><span>'+
       esc(t.id==='three'?'Desde 3 (c/u)':t.id==='dozen'?'Docena (c/u)':'Cajón x'+t.units)+
       '</span><strong>'+money(t.id==='case'?t.total:t.pricePerUnit)+'</strong></div>').join(''):
       '<span class="tier-placeholder">Consulta precios especiales</span>')+
     '</div>'+
     '<div class="product-actions"><button type="button" data-detail="'+p.id+'">DETALLES</button>'+
-     '<button class="add-button" type="button" data-add="'+p.id+'" '+(p.available&&canAdd(p,getTier(p,'unit'),1)?'':'disabled')+'>'+
+     '<button class="add-button" type="button" data-add="'+p.id+'" '+(p.available&&canAdd(p,isWholesale?first:getTier(p,'unit'),1)?'':'disabled')+'>'+
       (p.available?'＋ AGREGAR':'AGOTADO')+'</button></div>'+
    '</div></article>';
 }
 function renderArrivals(){
- const items=state.products.slice().sort((a,b)=>b.id-a.id).slice(0,5);
+ const items=state.products.filter(p=>!isWholesale||hasWholesale(p)).slice().sort((a,b)=>b.id-a.id).slice(0,5);
  el.arrivals.innerHTML=items.length?items.map(p=>card(p,true)).join(''):
   '<div class="arrival-empty">✨ Estamos preparando nuestros nuevos ingresos. Pronto encontrarás productos y precios aquí.</div>';
 }
@@ -231,7 +237,7 @@ function renderCatalog(){
 function openModal(id){
  const p=getProduct(id);if(!p)return;
  state.lastFocus=document.activeElement;
- state.open={id,tier:'unit',packs:1};
+ state.open={id,tier:allowedTiers(p)[0]?.id||'unit',packs:1};
  const photo=p.photos?.[0];
  el.details.innerHTML='<div class="modal-grid"><div>'+
   '<div class="modal-main-photo">'+(photo?'<img src="'+esc(photo)+'" id="modalMainPhoto" alt="'+esc(p.name)+'">':'<span class="photo-placeholder">Fotografía no disponible</span>')+'</div>'+
@@ -243,8 +249,8 @@ function openModal(id){
    '<span>'+esc(p.category||'Otros')+'</span>'+
    '<span>'+(p.available?'DISPONIBLE':'AGOTADO')+'</span></div>'+
    '<h2 id="dialogTitle">'+esc(p.name)+'</h2><p>'+esc(p.description||'Consulta disponibilidad y modelos con Mega Compra.')+'</p>'+
-   '<div class="modal-tiers">'+tiers(p).map(t=>
-    '<label><input type="radio" name="modalTier" value="'+t.id+'" '+(t.id==='unit'?'checked':'')+'>'+
+   '<div class="modal-tiers">'+allowedTiers(p).map(t=>
+    '<label><input type="radio" name="modalTier" value="'+t.id+'" '+(t.id===state.open.tier?'checked':'')+'>'+
     '<span>'+esc(t.label)+'</span><strong>'+money(t.total)+'</strong></label>').join('')+'</div>'+
    (p.available?'<div class="modal-qty-row"><div><strong>Cantidad de paquetes</strong>'+
     '<small id="modalUnits">Equivale a 1 unidad</small></div>'+
@@ -311,7 +317,7 @@ for(const container of [el.grid,el.arrivals]){
   if(!button)return;
   if(button.hasAttribute('data-detail'))openModal(Number(button.dataset.detail));
   else if(button.hasAttribute('data-add')){
-   if(addToCart(Number(button.dataset.add)))renderCatalog();
+   if(addToCart(Number(button.dataset.add),isWholesale?allowedTiers(getProduct(Number(button.dataset.add)))[0]?.id:'unit'))renderCatalog();
   }
  });
 }
@@ -375,7 +381,7 @@ function initWhatsApp(){
  if(!state.whatsapp){
   el.contact.classList.add('hidden');el.bottomWhatsapp.classList.add('hidden');return;
  }
- const message='Hola Mega Compra, quisiera consultar su catálogo de productos por menor y mayor.';
+ const message=isWholesale?'Hola Mega Compra, quisiera consultar su catálogo mayorista.':'Hola Mega Compra, quisiera consultar su catálogo de productos por menor.';
  const url='https://wa.me/'+state.whatsapp+'?text='+encodeURIComponent(message);
  el.contact.href=url;el.bottomWhatsapp.href=url;
 }
@@ -384,7 +390,7 @@ async function loadCatalog(){
   const response=await fetch('/api/catalogo/publico',{credentials:'omit',cache:'no-store'});
   if(!response.ok)throw Error('HTTP '+response.status);
   const data=await response.json();
-  state.products=Array.isArray(data.products)?data.products.filter(x=>Number(x.price_unit)>0):[];
+  state.products=Array.isArray(data.products)?data.products.filter(x=>Number(x.price_unit)>0&&(!isWholesale||hasWholesale(x))):[];
   state.whatsapp=/^\d{8,15}$/.test(String(data.whatsapp||''))?String(data.whatsapp):'';
   state.cart=readCart();
   sanitizeCart();
@@ -398,4 +404,22 @@ async function loadCatalog(){
   renderCart();
  }
 }
+function initializeMode(){
+ if(!isWholesale)return;
+ document.title='Mega Compra | Catálogo mayorista';
+ document.querySelector('meta[name="description"]')?.setAttribute('content','Mega Compra Bolivia: catálogo exclusivo para compras desde 3 unidades, por docena y por cajón.');
+ document.querySelector('#heroKickerText').textContent='MEGA COMPRA MAYORISTAS';
+ document.querySelector('#heroHeading').innerHTML='Compra más,<br><em>paga menos.</em>';
+ document.querySelector('#heroDescription').textContent='Precios especiales por volumen, docena y cajón. Selecciona tus productos y consulta tu pedido por WhatsApp.';
+ document.querySelector('#catalogTitle').textContent='Productos por mayor';
+ document.querySelector('#catalogDescription').textContent='Solo productos con precios mayoristas configurados.';
+ document.querySelector('#wholesaleLink').style.background='#b91925';
+ document.querySelector('#wholesaleLink').style.borderColor='#b91925';
+ document.querySelector('#minorLink').style.background='#fff';
+ document.querySelector('#minorLink').style.color='#111';
+ document.querySelectorAll('.catalog-tab').forEach(x=>{if(x.dataset.tab==='available'||x.dataset.tab==='recent')return;if(x.dataset.tab==='all')x.textContent='Todos los mayoristas';});
+ const side=document.querySelector('.sidebar-note');if(side)side.innerHTML='<strong>¿Quieres comprar una sola unidad?</strong><p>Visita nuestro catálogo minorista.</p><a href="/catalogo">Ver catálogo por menor →</a>';
+ document.querySelector('.footer p')?.textContent;
+}
+initializeMode();
 loadCatalog();
