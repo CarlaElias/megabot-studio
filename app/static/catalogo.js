@@ -461,12 +461,18 @@ document.addEventListener('keydown',ev=>{
  }
 });
 function initWhatsApp(){
+ const footerContact=document.getElementById('footerWhatsapp');
+ const footerNumber=document.getElementById('footerWhatsappNumber');
  if(!state.whatsapp){
-  el.contact.classList.add('hidden');el.bottomWhatsapp.classList.add('hidden');return;
+  el.contact.classList.add('hidden');el.bottomWhatsapp.classList.add('hidden');
+  if(footerContact)footerContact.hidden=true;
+  return;
  }
  const message=isWholesale?'Hola Mega Compra, quisiera consultar su catálogo mayorista.':'Hola Mega Compra, quisiera consultar su catálogo de productos por menor.';
  const url='https://wa.me/'+state.whatsapp+'?text='+encodeURIComponent(message);
  el.contact.href=url;el.bottomWhatsapp.href=url;
+ if(footerContact){footerContact.href=url;footerContact.hidden=false;}
+ if(footerNumber)footerNumber.textContent='+'+state.whatsapp;
 }
 async function loadCatalog(){
  try{
