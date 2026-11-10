@@ -176,6 +176,7 @@ def public_catalog(db:Session=Depends(get_db)):
             'whatsapp':'59165129194',
             'products':[{
                 'id':product.id,
+                'sku':product.sku,
                 'name':product.name,
                 'category':product.category,
                 'description':product.description,
