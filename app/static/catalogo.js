@@ -5,6 +5,15 @@ const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;
 const fmt=v=>Number(v).toLocaleString('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2});
 const money=v=>'Bs '+fmt(v);
 const normalizeSearch=value=>String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('es').trim();
+function catalogShortDescription(value){
+ const first=String(value??'').trim().split(/\r?\n/)[0].replace(/\*\*/g,'').trim();
+ if(first.length<=160)return first;
+ const clipped=first.slice(0,159).replace(/\s+\S*$/,'').trim();
+ return (clipped||first.slice(0,159))+'…';
+}
+function catalogFullDescription(value){
+ return esc(value).replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>').replace(/\r?\n/g,'<br>');
+}
 const el={
  search:$('#productSearch'),sort:$('#sortProducts'),onlyAvailable:$('#onlyAvailable'),
  nav:$('#categoryNav'),categoryFilters:$('#categoryFilters'),grid:$('#productGrid'),
@@ -201,7 +210,7 @@ function card(p,isRecent=false){
    '<div class="product-details">'+
     '<small class="product-sku">COD: '+esc(p.sku||'#'+p.id)+'</small>'+
     '<h3 class="product-title">'+esc(p.name)+'</h3>'+
-    '<p class="product-description">'+esc(p.description||'Consulta las características y presentaciones disponibles.')+'</p>'+
+    '<p class="product-description">'+esc(catalogShortDescription(p.description||'Consulta las características y presentaciones disponibles.'))+'</p>'+
     '<div class="product-prices"><div class="unit-label">'+(isWholesale?'PRECIO MAYORISTA':'PRECIO POR UNIDAD')+'</div>'+
     '<div class="unit-price"><small>Bs</small> '+fmt(isWholesale&&first?first.pricePerUnit:p.price_unit)+'</div>'+
     (opts.length?opts.map(t=>'<div class="price-tier '+(t.id==='case'?'case':'')+'"><span>'+
@@ -265,7 +274,7 @@ function openModal(id){
    '<span>COD: '+esc(p.sku||'#'+p.id)+'</span>'+
    '<span>'+esc(p.category||'Otros')+'</span>'+
    '<span>'+(p.available?'DISPONIBLE':'AGOTADO')+'</span></div>'+
-   '<h2 id="dialogTitle">'+esc(p.name)+'</h2><p>'+esc(p.description||'Consulta disponibilidad y modelos con Mega Compra.')+'</p>'+
+   '<h2 id="dialogTitle">'+esc(p.name)+'</h2><p>'+catalogFullDescription(p.description||'Consulta disponibilidad y modelos con Mega Compra.')+'</p>'+
    '<div class="modal-tiers">'+allowedTiers(p).map(t=>
     '<label><input type="radio" name="modalTier" value="'+t.id+'" '+(t.id===state.open.tier?'checked':'')+'>'+
     '<span>'+esc(t.label)+'</span><strong>'+money(t.total)+'</strong></label>').join('')+'</div>'+
