@@ -33,7 +33,7 @@ window.addEventListener('appinstalled',()=>{
  const node=$('#pwaInstallHelp');if(node)node.classList.add('hidden');
 });
 
-const st={me:null,products:[],wholesale:[],sales:[],deliveries:[],jobs:[],notices:[],audit:[],page:'dashboard',selectedJob:null,galleryImages:[],lastNotification:null,ws:null,branchStocks:{},branchTransfers:[],supplierHistory:[],supplierAlerts:[],supplierAlertCount:null,supplierWatch:{items:[],alerts:[],pending_count:0,automatic_connection:false},catalogAdmin:[],catalogEditingId:null};
+const st={me:null,products:[],wholesale:[],sales:[],deliveries:[],jobs:[],notices:[],audit:[],page:'dashboard',selectedJob:null,galleryImages:[],lastNotification:null,ws:null,branchStocks:{},branchTransfers:[],supplierHistory:[],supplierAlerts:[],supplierAlertCount:null,catalogAdmin:[],catalogEditingId:null};
 function csrf(){return decodeURIComponent((document.cookie.match(/(?:^|; )megabot_csrf=([^;]+)/)||[])[1]||'')}
 async function api(path,opts={}){
  const method=opts.method||'GET';const headers=opts.headers||{};
@@ -59,9 +59,9 @@ async function refreshOnce(){
  if(!st.me)return;
  // Las consultas se realizan en pares para no saturar Supabase Free.
  // Si una falla, las demás siguen cargando y la pantalla no se queda bloqueada.
- const paths=['/products','/wholesale','/sales','/deliveries','/jobs','/notifications','/dashboard','/supplier/history','/supplier/alerts','/supplier/watch'];
+ const paths=['/products','/wholesale','/sales','/deliveries','/jobs','/notifications','/dashboard','/supplier/history','/supplier/alerts'];
  const previous=[st.products,st.wholesale,st.sales,st.deliveries,st.jobs,st.notices,st.dashboard||{},st.supplierHistory,
-   {items:st.supplierAlerts,pending_count:st.supplierAlertCount||0},st.supplierWatch];
+   {items:st.supplierAlerts,pending_count:st.supplierAlertCount||0}];
  const responses=[];
  let partial=false;
  for(let i=0;i<paths.length;i+=2){
@@ -74,7 +74,7 @@ async function refreshOnce(){
    }
   });
  }
- const [products,wholesale,sales,deliveries,jobs,notices,dashboard,supplierHistory,supplierAlertFeed,supplierWatchFeed]=responses;
+ const [products,wholesale,sales,deliveries,jobs,notices,dashboard,supplierHistory,supplierAlertFeed]=responses;
  try{
   const location=await api('/branches/lapaz');
   st.branchStocks=location.stocks||{};
@@ -90,7 +90,6 @@ async function refreshOnce(){
  st.dashboard=dashboard;st.supplierHistory=supplierHistory;
  st.supplierAlerts=supplierAlertFeed.items||[];
  st.supplierAlertCount=Number(supplierAlertFeed.pending_count||0);
- st.supplierWatch=supplierWatchFeed||{items:[],alerts:[],pending_count:0,automatic_connection:false};
  const conn=$('#conn');
  if(conn)conn.textContent=partial?'● Sincronización parcial':'● Sincronizado';
  if(oldSupplierCount!==null&&st.supplierAlertCount>oldSupplierCount){
@@ -115,7 +114,7 @@ async function refreshOnce(){
 }
 
 function navigate(page){st.page=page;$$('.page').forEach(e=>e.classList.toggle('hidden',e.id!=='page-'+page));$$('.nav').forEach(e=>e.classList.toggle('active',e.dataset.page===page));let txt=$(`.nav[data-page="${page}"] span`);$('#crumb').textContent=txt?.textContent||'Panel principal';$('.sidebar').classList.remove('open');render();if(page==='catalog-editor')loadCatalogAdmin();}
-function render(){if(!st.me)return; renderMetrics();renderProducts();renderSupplier();renderSupplierWatch();renderSupplierAlerts();renderSupplierHistory();renderInventory();renderBranches();renderSales();renderDeliveries();renderJobs();renderOptions();renderNotifications();renderAudit();}
+function render(){if(!st.me)return; renderMetrics();renderProducts();renderSupplier();renderSupplierAlerts();renderSupplierHistory();renderInventory();renderBranches();renderSales();renderDeliveries();renderJobs();renderOptions();renderNotifications();renderAudit();}
 /* Catálogo público: solo el administrador habilita los artículos y define los precios finales. */
 async function loadCatalogAdmin(){
  const list=$('#catalogProductList');
@@ -251,57 +250,6 @@ function renderSupplier(){
 
 
 
-/* Información de la importadora de WhatsApp, totalmente independiente de MegaCompra. */
-function renderSupplierWatch(){
- const data=st.supplierWatch||{items:[],alerts:[],pending_count:0};
- const rows=data.items||[],alerts=data.alerts||[],pending=Number(data.pending_count||0);
- const bubble=$('#supplierWatchNavCount');
- if(bubble){bubble.textContent=pending>99?'99+':String(pending);bubble.classList.toggle('hidden',!pending)}
- const listed=rows.filter(p=>p.listed),removed=rows.filter(p=>!p.listed);
- const metric=$('#supplierWatchMetrics');
- if(metric)metric.innerHTML=[
-  ['Productos observados',rows.length],
-  ['En catálogo proveedor',listed.length],
-  ['Retirados del catálogo',removed.length],
-  ['Alertas pendientes',pending],
- ].map(([label,num])=>'<div class="inventory-kpi"><strong>'+num+'</strong><small>'+esc(label)+'</small></div>').join('');
- const updated=data.last_imported_at?new Date(data.last_imported_at).toLocaleString('es-BO',{dateStyle:'short',timeStyle:'short'}):'sin registros';
- const conn=$('#supplierWatchConnection');
- if(conn)conn.textContent='Consulta automática de WhatsApp: NO conectada. Última captura registrada: '+updated+'. Los datos no se actualizan por sí solos.';
- const term=($('#supplierWatchSearch')?.value||'').trim().toLocaleLowerCase('es');
- const filter=$('#supplierWatchFilter')?.value||'all';
- const shown=rows.filter(p=>(filter==='all'||(filter==='listed'&&p.listed)||(filter==='removed'&&!p.listed))&&
-    (!term||(p.title+' '+p.external_id).toLocaleLowerCase('es').includes(term)));
- const count=$('#supplierWatchListCount');
- if(count)count.textContent=shown.length+' de '+rows.length+' productos';
- const target=$('#supplierWatchItems');
- if(target)target.innerHTML=shown.slice(0,150).map(p=>{
-  const price=p.base_price==null?'No informado':bs(p.base_price);
-  const qty=p.available_units==null?'No informada':p.available_units+' unidades';
-  const tag=p.listed?'<span class="supplier-available">En catálogo del proveedor</span>':'<span class="supplier-unavailable">Retirado del catálogo</span>';
-  return '<div class="list-item supplier-watch-row"><div><strong>'+esc(p.title)+'</strong>'+
-   '<small>Precio base: <b>'+esc(price)+'</b> · Cantidad del proveedor: <b>'+esc(qty)+'</b></small>'+
-   '<small>'+tag+' · Referencia externa: '+esc(p.external_id)+'</small></div></div>';
- }).join('')+(shown.length>150?'<p class="dim">Mostrando 150 productos. Utiliza la búsqueda para encontrar otro.</p>':'')||
- '<p class="dim">Todavía no se ha importado una captura verificable de este proveedor.</p>';
- const alertCount=$('#supplierWatchAlertCount');
- if(alertCount)alertCount.textContent=pending+' sin revisar';
- const kinds={nuevo:'Producto nuevo',retirado:'Retirado del proveedor',repuesto:'Regresó al catálogo',precio:'Cambio de precio base',cantidad:'Cambio de unidades',titulo:'Cambio de título'};
- const out=$('#supplierWatchAlerts');
- if(out)out.innerHTML=alerts.filter(a=>!a.reviewed_at).slice(0,150).map(a=>{
-  let detail='';
-  if(a.kind==='precio')detail='Precio base: '+(a.old_base_price==null?'sin dato':bs(a.old_base_price))+' → '+(a.new_base_price==null?'sin dato':bs(a.new_base_price));
-  else if(a.kind==='cantidad')detail='Unidades del proveedor: '+(a.old_available_units==null?'sin dato':a.old_available_units)+' → '+(a.new_available_units==null?'sin dato':a.new_available_units);
-  else if(a.kind==='titulo')detail='Antes: '+(a.old_title||'sin título');
-  else detail='Precio: '+(a.new_base_price==null?'sin dato':bs(a.new_base_price))+' · Cantidad: '+(a.new_available_units==null?'sin dato':a.new_available_units);
-  const d=new Date(a.created_at);
-  const date=Number.isNaN(d.getTime())?'':d.toLocaleString('es-BO',{dateStyle:'short',timeStyle:'short'});
-  return '<div class="list-item supplier-watch-event"><div><small>'+esc(kinds[a.kind]||a.kind)+' · '+esc(date)+'</small>'+
-   '<strong>'+esc(a.title)+'</strong><small>'+esc(detail)+'</small></div>'+
-   '<button class="mini" type="button" data-supplier-watch-review="'+a.id+'">✓ Revisada</button></div>';
- }).join('')||'<p class="dim">No hay cambios pendientes. La consulta automática sigue sin conexión.</p>';
-}
-
 const SUPPLIER_ALERT_TYPES={
  nuevo:{name:'Nuevo en importadora',icon:'✦',tone:'new',action:'Revisa si ya publicaste este producto en Facebook. Si decides venderlo, prepara foto y precio de venta antes de publicarlo.'},
  agotado:{name:'Agotado en importadora',icon:'●',tone:'out',action:'Revisa tu anuncio en Facebook Marketplace y actualiza o pausa la publicación si dependes del proveedor. Si tienes stock propio puedes seguir vendiendo esas unidades.'},
@@ -418,8 +366,8 @@ function lpPayload(){return {name:$('#lpName').value,category:$('#lpCategory').v
 function clearLpForm(){const form=$('#lpProductForm');form.reset();$('#lpId').value='';$('#lpSku').value='';$('#lpStock').value='0';$('#lpFormTitle').textContent='Registrar producto exclusivo de La Paz';$('#lpPhotosExisting').innerHTML=''}
 function editLpProduct(id){const p=st.products.find(x=>x.id===id);if(!p||p.home_location!=='lapaz')return toast('Este producto pertenece a Tienda. Edítalo allí.',true);navigate('branch');$('#lpId').value=p.id;$('#lpSku').value=p.sku;$('#lpName').value=p.name;$('#lpCategory').value=p.category;$('#lpDesc').value=p.description||'';$('#lpPrice').value=p.sale_price;$('#lpCost').value=p.purchase_cost;$('#lpStock').value=Number(st.branchStocks[p.id]||0);$('#lpPhotos').value='';$('#lpFormTitle').textContent='Editar '+p.sku;renderLpPhotos(p);$('#lpProductForm').scrollIntoView({behavior:'smooth',block:'start'})}
 function renderLpPhotos(p){$('#lpPhotosExisting').innerHTML=p?.photos?.map(im=>`<div class="thumb"><img src="${im.url}" alt="Foto de La Paz"><button data-lp-photo-delete="${im.id}" title="Eliminar foto">×</button></div>`).join('')||'<p class="dim">Puedes añadir fotografías desde el formulario y luego guardar.</p>'}
-function productPayload(){return {name:$('#productName').value,category:$('#productCategory').value,description:$('#productDescription').value,sale_price:$('#productPrice').value,purchase_cost:$('#productCost').value,stock:Number($('#productStock').value)}}
-function openEditor(id){let p=st.products.find(v=>v.id===id);$('#productEditor').classList.remove('hidden');$('#editorTitle').textContent=p?'Editar producto y fotografías':'Registrar producto';$('#productId').value=p?.id||'';$('#productSku').value=p?.sku||'';$('#productSku').placeholder=p?'Código permanente':'Se asignará automáticamente: TDA-…';$('#productName').value=p?.name||'';$('#productCategory').value=p?.category||'Hogar';$('#productDescription').value=p?.description||'';$('#productPrice').value=p?.sale_price??'';$('#productCost').value=p?.purchase_cost??'';$('#productStock').value=p?.stock??'0';$('#photoManager').classList.toggle('hidden',!p);renderPhotos(p);$('#productEditor').scrollIntoView({behavior:'smooth',block:'start'})}
+function productPayload(){const supplierPrice=$('#productSupplierPrice').value.trim(),supplierQty=$('#productSupplierQty').value.trim();return {name:$('#productName').value,category:$('#productCategory').value,description:$('#productDescription').value,sale_price:$('#productPrice').value,purchase_cost:$('#productCost').value,stock:Number($('#productStock').value),supplier_unit_price:supplierPrice===''?null:Number(supplierPrice),supplier_stock:supplierQty===''?null:Number(supplierQty)}}
+function openEditor(id){let p=st.products.find(v=>v.id===id);$('#productEditor').classList.remove('hidden');$('#editorTitle').textContent=p?'Editar producto y fotografías':'Registrar producto';$('#productId').value=p?.id||'';$('#productSku').value=p?.sku||'';$('#productSku').placeholder=p?'Código permanente':'Se asignará automáticamente: TDA-…';$('#productName').value=p?.name||'';$('#productCategory').value=p?.category||'Hogar';$('#productDescription').value=p?.description||'';$('#productPrice').value=p?.sale_price??'';$('#productCost').value=p?.purchase_cost??'';$('#productStock').value=p?.stock??'0';$('#productSupplierPrice').value=p?.supplier_unit_price??'';$('#productSupplierQty').value=p?.supplier_stock??'';$('#photoManager').classList.toggle('hidden',!p);renderPhotos(p);$('#productEditor').scrollIntoView({behavior:'smooth',block:'start'})}
 function renderPhotos(p){$('#existingPhotos').innerHTML=p?.photos?.map(x=>`<div class="thumb"><img src="${x.url}" alt="Fotografía del producto"><button data-photo-delete="${x.id}" title="Eliminar imagen">×</button></div>`).join('')||'<p class="dim">Sin fotografías. Puedes añadir hasta 20.</p>'}
 function whPayload(){return {name:$('#whName').value,category:$('#whCategory').value,description:$('#whDescription').value,stock:Number($('#whStock').value),units_per_pack:Number($('#whPackQty').value),units_per_carton:Number($('#whCartonQty').value),min_wholesale_qty:Number($('#whMinQty').value),colors:$('#whColors').value,supplier:$('#whSupplier').value,purchase_cost:$('#whCost').value,other_unit_cost:$('#whExtra').value,sale_price:$('#whRetail').value,wholesale_unit_price:$('#whPrice').value,pack_total_price:$('#whPackPrice').value,carton_total_price:$('#whCartonPrice').value}}
 function whCalc(){let q=Number($('#whPackQty').value)||0,c=Number($('#whCartonQty').value)||0;const cost=Number($('#whCost').value||0)+Number($('#whExtra').value||0),p=Number($('#whPrice').value||0),pack=Number($('#whPackPrice').value||0),cart=Number($('#whCartonPrice').value||0);$('#whPreview').textContent=`Costo real por unidad: ${bs(cost)} · Ganancia bruta mayorista: ${bs(p-cost)} / ud. · Por embalaje (${q} ud.): ${bs(pack-q*cost)} · Por cajón (${c} ud.): ${bs(cart-c*cost)}. Valores estimados antes de otros gastos de venta.`}
@@ -794,20 +742,6 @@ on('#loadAiAd','click',async()=>{let id=$('#adProduct').value;if(!id)return toas
 on('#copyFacebook','click',async()=>{await navigator.clipboard.writeText($('#fbTitle').value+'\n\n'+$('#fbDescription').value);toast('Texto de Facebook copiado')});
 on('#copyTikTok','click',async()=>{await navigator.clipboard.writeText($('#tkCaption').value);toast('Texto de TikTok copiado')});
 
-on('#supplierWatchSearch','input',renderSupplierWatch);
-on('#supplierWatchFilter','change',renderSupplierWatch);
-on('#supplierWatchRefresh','click',async()=>{
- try{st.supplierWatch=await api('/supplier/watch');renderSupplierWatch();toast('Novedades cargadas. La revisión externa automática sigue pendiente de conexión.')}
- catch(error){toast(error.message,true)}
-});
-on('#supplierWatchAlerts','click',async event=>{
- const button=event.target.closest('[data-supplier-watch-review]');if(!button)return;
- const id=Number(button.dataset.supplierWatchReview);if(!Number.isSafeInteger(id))return;
- button.disabled=true;
- try{await api('/supplier/watch/alerts/'+id+'/review',{method:'POST',body:JSON.stringify({reviewed:true})});
- st.supplierWatch=await api('/supplier/watch');renderSupplierWatch();toast('Novedad marcada como revisada')}
- catch(error){toast(error.message,true);button.disabled=false}
-});
 on('#notificationBtn','click',async()=>{$('#noticePanel').classList.toggle('hidden');if('Notification'in window&&Notification.permission==='default')try{await Notification.requestPermission()}catch{}});on('#closeNotices','click',()=>$('#noticePanel').classList.add('hidden'));
 on('#enablePush','click',async()=>{try{
   if(!('serviceWorker'in navigator)||!('PushManager'in window))throw Error('Este navegador no admite notificaciones push.');
