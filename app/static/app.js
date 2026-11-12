@@ -137,8 +137,12 @@ function renderCatalogList(){
  const list=$('#catalogProductList');if(!list)return;
  const rows=st.catalogAdmin||[];
  const published=rows.filter(x=>x.published).length;
+ const onlyWholesale=rows.filter(x=>x.published&&x.wholesale_only).length;
  $('#catalogStats').innerHTML=[
-  ['Productos registrados',rows.length],['Publicados para clientes',published],['Sin publicar',rows.length-published]
+  ['Productos registrados',rows.length],
+  ['Visibles por menor',published-onlyWholesale],
+  ['Agotados · solo mayor',onlyWholesale],
+  ['Sin publicar',rows.length-published]
  ].map(([label,value])=>'<div class="inventory-kpi"><strong>'+value+'</strong><small>'+esc(label)+'</small></div>').join('');
  const text=($('#catalogFind').value||'').trim().toLowerCase();
  const filter=$('#catalogVisibility').value;
@@ -146,7 +150,7 @@ function renderCatalogList(){
   (filter==='all'||(filter==='published'&&p.published)||(filter==='hidden'&&!p.published)) &&
   (!text||(p.name+' '+p.sku+' '+p.category).toLowerCase().includes(text))
  );
- $('#catalogListSummary').textContent=matches.length+' coincidencias · '+published+' visibles al público';
+ $('#catalogListSummary').textContent=matches.length+' coincidencias · '+(published-onlyWholesale)+' visibles por menor · '+onlyWholesale+' agotados solo en mayor';
  list.innerHTML=matches.map(p=>{
   const photo=p.photos?.[0];
   const image=photo?
@@ -157,7 +161,8 @@ function renderCatalogList(){
    '<small>'+esc(p.sku)+' · '+esc(p.category||'Otros')+'</small>'+
    '<small>'+(p.published?'<span class="catalog-published">● Público</span>':'<span class="catalog-private">○ Sin publicar</span>')+
    ' · '+p.photos.length+' foto(s)'+
-   (p.price_unit!==null?' · Bs '+Number(p.price_unit).toFixed(2):' · Sin precio público')+'</small></div>'+
+   (p.price_unit!==null?' · Bs '+Number(p.price_unit).toFixed(2):' · Sin precio público')+
+   (p.published&&p.wholesale_only?' · <strong>AGOTADO · solo mayoristas</strong>':'')+'</small></div>'+
    '<button type="button" class="mini" data-catalog-edit="'+p.product_id+'">Configurar</button></div>';
  }).join('')||'<p class="dim">No hay productos con ese filtro.</p>';
 }
