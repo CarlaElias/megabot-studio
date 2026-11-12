@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from decimal import Decimal
-from sqlalchemy import create_engine, Integer, String, Numeric, DateTime, ForeignKey, Text, Boolean, BigInteger
+from sqlalchemy import create_engine, Integer, String, Numeric, DateTime, ForeignKey, Text, Boolean, BigInteger, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, mapped_column, Mapped, relationship, sessionmaker
 from sqlalchemy.sql import func
 import os
@@ -190,6 +190,38 @@ class SupplierAlert(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     reviewed_by: Mapped[int | None] = mapped_column(ForeignKey('admins.id', ondelete='SET NULL'), nullable=True)
+
+
+class SupplierWatchItem(Base):
+    """Registro independiente del catálogo del proveedor. Nunca es producto publicable."""
+    __tablename__ = 'supplier_watch_items'
+    id: Mapped[int] = mapped_column(BigInteger().with_variant(Integer, 'sqlite'), primary_key=True, autoincrement=True)
+    source_key: Mapped[str] = mapped_column(String(80), nullable=False)
+    external_id: Mapped[str] = mapped_column(String(180), nullable=False)
+    title: Mapped[str] = mapped_column(String(240), nullable=False)
+    base_price: Mapped[Decimal | None] = mapped_column(Numeric(12,2), nullable=True)
+    available_units: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    listed: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    __table_args__ = (UniqueConstraint('source_key', 'external_id', name='supplier_watch_items_source_external_key'),)
+
+
+class SupplierWatchAlert(Base):
+    """Cambio de un producto externo; no afecta ventas, inventarios o catálogo público."""
+    __tablename__ = 'supplier_watch_alerts'
+    id: Mapped[int] = mapped_column(BigInteger().with_variant(Integer, 'sqlite'), primary_key=True, autoincrement=True)
+    item_id: Mapped[int] = mapped_column(ForeignKey('supplier_watch_items.id', ondelete='RESTRICT'), nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    old_base_price: Mapped[Decimal | None] = mapped_column(Numeric(12,2), nullable=True)
+    new_base_price: Mapped[Decimal | None] = mapped_column(Numeric(12,2), nullable=True)
+    old_available_units: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    new_available_units: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    old_title: Mapped[str | None] = mapped_column(String(240), nullable=True)
+    new_title: Mapped[str | None] = mapped_column(String(240), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
 
 class CatalogEntry(Base):
     """Configuración PUBLICABLE: ningún precio de compra ni stock del proveedor se expone."""
