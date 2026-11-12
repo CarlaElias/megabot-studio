@@ -280,3 +280,13 @@ input,textarea,select{background:color-mix(in srgb,var(--bg) 75%,var(--surface))
  background:#e31d37;color:white;font-size:13px;font-style:italic;font-weight:800;line-height:1.2}
 .sidebar .brand img{border-radius:12px;background:#fff;padding:2px}
 .hero-logo img{border-radius:18px;background:white;padding:6px;max-width:80%;max-height:80%}
+
+/* Seguimiento externo: no confundir unidades de la importadora con inventario propio. */
+.supplier-watch-source{border-left:3px solid #d8b36b}
+.supplier-watch-layout{align-items:start}
+.supplier-watch-row,.supplier-watch-event{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.supplier-watch-row>div,.supplier-watch-event>div{display:flex;flex-direction:column;gap:5px;min-width:0}
+.supplier-watch-row strong,.supplier-watch-event strong{overflow-wrap:anywhere}
+.supplier-watch-row small,.supplier-watch-event small{display:block}
+.supplier-watch-event button{flex:0 0 auto}
+@media(max-width:700px){.supplier-watch-event{flex-wrap:wrap}.supplier-watch-event button{margin-left:auto}}
