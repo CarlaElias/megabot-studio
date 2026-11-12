@@ -121,6 +121,7 @@ def catalog_admin_row(product,entry):
         'own_stock':product.stock,
         'photos':[{'id':ph.id,'url':f'/api/photos/{ph.id}'} for ph in product.photos],
         'published':bool(entry.published) if entry else False,
+        'wholesale_only':product.supplier_status=='agotado' or product.supplier_stock==0,
         'available':bool(entry.available) if entry else True,
         'available_units':entry.available_units if entry else None,
         'price_unit':float(entry.price_unit) if entry and entry.price_unit is not None else None,
@@ -167,16 +168,23 @@ async def publish_catalog_product(product_id:int,data:CatalogPublishInput,
     return catalog_admin_row(product,entry)
 
 @app.get('/api/catalogo/publico')
-def public_catalog(db:Session=Depends(get_db)):
-    """Información pública exclusivamente: sin purchase_cost, supplier_stock o datos internos."""
-    rows=db.execute(
+def public_catalog(modo:Literal['menor','mayor']='menor',db:Session=Depends(get_db)):
+    """Catálogo público: los agotados del proveedor se muestran solo a mayoristas,
+    como referencia y sin permitir que se pidan. Nunca exponer datos privados."""
+    stmt=(
         select(Product,CatalogEntry)
         .join(CatalogEntry,CatalogEntry.product_id==Product.id)
         .where(Product.active.is_(True),CatalogEntry.published.is_(True),
                CatalogEntry.price_unit.is_not(None))
         .options(selectinload(Product.photos)).order_by(Product.id.desc())
         .limit(400)
-    ).all()
+    )
+    if modo=='menor':
+        # La cantidad del proveedor es independiente del stock propio. La política
+        # comercial pide ocultar estos artículos en el escaparate minorista.
+        stmt=stmt.where(Product.supplier_status!='agotado',
+                        (Product.supplier_stock.is_(None) | (Product.supplier_stock!=0)))
+    rows=db.execute(stmt).all()
     return {'currency':'BOB','store':'Mega Compra',
             'whatsapp':'59165129194',
             'products':[{
@@ -185,8 +193,12 @@ def public_catalog(db:Session=Depends(get_db)):
                 'name':product.name,
                 'category':product.category,
                 'description':product.description,
-                'available':bool(entry.available) and (entry.available_units is None or entry.available_units>0),
-                'available_units':entry.available_units,
+                'wholesale_only':product.supplier_status=='agotado' or product.supplier_stock==0,
+                'available':(bool(entry.available) and
+                             (entry.available_units is None or entry.available_units>0) and
+                             product.supplier_status!='agotado' and product.supplier_stock!=0),
+                'available_units':(0 if product.supplier_status=='agotado' or product.supplier_stock==0
+                                    else entry.available_units),
                 'price_unit':float(entry.price_unit),
                 'price_three':float(entry.price_three) if entry.price_three is not None else None,
                 'price_dozen':float(entry.price_dozen) if entry.price_dozen is not None else None,
