@@ -378,6 +378,9 @@ class ProductInput(BaseModel):
     sale_price:Decimal=Field(ge=0)
     purchase_cost:Decimal=Field(ge=0)
     stock:int=Field(ge=0,le=1_000_000)
+    # Datos del proveedor: separados del costo real y de las existencias propias.
+    supplier_stock:int|None=Field(default=None,ge=0,le=1_000_000)
+    supplier_unit_price:Decimal|None=Field(default=None,ge=0,le=9999999999.99)
 
 @app.post('/api/branches/lapaz/products', status_code=201)
 async def new_lapaz_product(data:ProductInput,user=Depends(check_csrf),db:Session=Depends(get_db)):
@@ -431,10 +434,20 @@ def export_products_excel(user=Depends(authenticated),db:Session=Depends(get_db)
 @app.post('/api/products',status_code=201)
 async def new_product(data:ProductInput,user=Depends(check_csrf),db:Session=Depends(get_db)):
     # El ID de la fila evita carreras entre administradores y mantiene los códigos estables.
+    supplier_price=money(data.supplier_unit_price) if data.supplier_unit_price is not None else None
+    supplier_quantity=data.supplier_stock
     p=Product(sku='PENDIENTE-'+secrets.token_hex(12),name=data.name.strip(),
               category=data.category.strip(),description=data.description,
-              sale_price=money(data.sale_price),purchase_cost=money(data.purchase_cost),stock=data.stock)
+              sale_price=money(data.sale_price),purchase_cost=money(data.purchase_cost),stock=data.stock,
+              supplier_stock=supplier_quantity,supplier_unit_price=supplier_price,
+              supplier_status=('agotado' if supplier_quantity==0 else 'disponible' if supplier_quantity is not None else 'sin_revisar'),
+              supplier_checked_at=now() if supplier_quantity is not None or supplier_price is not None else None)
     db.add(p);db.flush()
+    if supplier_quantity is not None or supplier_price is not None:
+        db.add(SupplierCatalogUpdate(
+            product_id=p.id,old_supplier_stock=None,new_supplier_stock=supplier_quantity,
+            old_supplier_unit_price=None,new_supplier_unit_price=supplier_price,
+            source_label='Registro manual de datos de importadora',admin_id=user['id']))
     code=f'TDA-{p.id:06d}'
     # Protección adicional si hay códigos antiguos importados con este mismo valor.
     if db.scalar(select(Product.id).where(Product.sku==code)):
@@ -452,6 +465,25 @@ async def edit_product(product_id:int,data:ProductInput,user=Depends(check_csrf)
     for key in ('name','category','description','stock'):
         setattr(p,key,getattr(data,key).strip() if isinstance(getattr(data,key),str) else getattr(data,key))
     p.sale_price=money(data.sale_price);p.purchase_cost=money(data.purchase_cost)
+    # Clientes antiguos pueden editar el producto sin suministrar datos del proveedor.
+    # En ese caso conservamos los datos existentes.
+    fields=data.model_fields_set
+    if 'supplier_stock' in fields or 'supplier_unit_price' in fields:
+        old_qty=p.supplier_stock
+        old_price=p.supplier_unit_price
+        if 'supplier_stock' in fields:
+            p.supplier_stock=data.supplier_stock
+            p.supplier_status=('agotado' if data.supplier_stock==0 else 'disponible'
+                               if data.supplier_stock is not None else 'sin_revisar')
+        if 'supplier_unit_price' in fields:
+            p.supplier_unit_price=(money(data.supplier_unit_price)
+                                   if data.supplier_unit_price is not None else None)
+        if p.supplier_stock!=old_qty or p.supplier_unit_price!=old_price:
+            p.supplier_checked_at=now()
+            db.add(SupplierCatalogUpdate(
+                product_id=p.id,old_supplier_stock=old_qty,new_supplier_stock=p.supplier_stock,
+                old_supplier_unit_price=old_price,new_supplier_unit_price=p.supplier_unit_price,
+                source_label='Edición manual de datos de importadora',admin_id=user['id']))
     audit(db,user,'product.update',str(product_id));db.commit();await broadcast()
     return serial_product(p)
 
