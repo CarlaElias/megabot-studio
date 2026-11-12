@@ -13,7 +13,7 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import Session, selectinload
 from PIL import Image, ImageOps, UnidentifiedImageError
 from .models import (ROOT,DATA,SessionLocal,init_db,now,Admin,LoginSession,Product,Photo,
-                     Sale,SaleLine,Delivery,Notification,GenerationJob,GeneratedImage,Audit,PushSubscription,PaymentRecord,WholesaleProfile,BranchStock,BranchTransfer,SupplierCatalogUpdate,SupplierAlert,CatalogEntry)
+                     Sale,SaleLine,Delivery,Notification,GenerationJob,GeneratedImage,Audit,PushSubscription,PaymentRecord,WholesaleProfile,BranchStock,BranchTransfer,SupplierCatalogUpdate,SupplierAlert,SupplierWatchItem,SupplierWatchAlert,CatalogEntry)
 from .security import (authenticated,check_csrf,resolve,hash_token,new_login,login_allowed,failed_login,verify_pass)
 from .worker import worker_loop,FILES
 from .excel_export import products_excel
@@ -454,6 +454,137 @@ async def edit_product(product_id:int,data:ProductInput,user=Depends(check_csrf)
     p.sale_price=money(data.sale_price);p.purchase_cost=money(data.purchase_cost)
     audit(db,user,'product.update',str(product_id));db.commit();await broadcast()
     return serial_product(p)
+
+
+# Seguimiento del proveedor externo (WhatsApp). Este registro NO es el inventario.
+# Las capturas verificadas se incorporarán mediante un adaptador autorizado.
+WATCH_SOURCE = 'whatsapp_59163247283'
+WATCH_URL = 'https://wa.me/c/59163247283'
+
+class SupplierWatchRowInput(BaseModel):
+    external_id: str = Field(min_length=1,max_length=180)
+    title: str = Field(min_length=1,max_length=240)
+    base_price: Decimal | None = Field(default=None,ge=0,le=9999999999.99)
+    available_units: int | None = Field(default=None,ge=0,le=1000000)
+
+class SupplierWatchSnapshotInput(BaseModel):
+    items: list[SupplierWatchRowInput] = Field(min_length=1,max_length=1500)
+    complete: bool = False
+
+@app.get('/api/supplier/watch')
+def list_supplier_watch(user=Depends(authenticated),db:Session=Depends(get_db)):
+    """Solo administradores. Las existencias del proveedor nunca son stock propio."""
+    rows=db.scalars(select(SupplierWatchItem)
+        .where(SupplierWatchItem.source_key==WATCH_SOURCE)
+        .order_by(SupplierWatchItem.listed.desc(),SupplierWatchItem.title.asc()).limit(1500)).all()
+    alerts=db.execute(select(SupplierWatchAlert,SupplierWatchItem.title)
+        .join(SupplierWatchItem,SupplierWatchAlert.item_id==SupplierWatchItem.id)
+        .where(SupplierWatchItem.source_key==WATCH_SOURCE)
+        .order_by(SupplierWatchAlert.id.desc()).limit(400)).all()
+    pending=db.scalar(select(func.count()).select_from(SupplierWatchAlert)
+        .join(SupplierWatchItem,SupplierWatchAlert.item_id==SupplierWatchItem.id)
+        .where(SupplierWatchItem.source_key==WATCH_SOURCE,SupplierWatchAlert.reviewed_at.is_(None))) or 0
+    last_seen=max((p.last_seen_at for p in rows),default=None)
+    return {
+        'source_url':WATCH_URL,
+        'automatic_connection':False,
+        'connection_status':'pendiente_de_acceso_al_catalogo',
+        'last_imported_at':last_seen.isoformat() if last_seen else None,
+        'pending_count':pending,
+        'items':[{
+            'id':p.id,'external_id':p.external_id,'title':p.title,
+            'base_price':float(p.base_price) if p.base_price is not None else None,
+            'available_units':p.available_units,'listed':p.listed,
+            'first_seen_at':p.first_seen_at.isoformat(),
+            'last_seen_at':p.last_seen_at.isoformat(),
+        } for p in rows],
+        'alerts':[{
+            'id':a.id,'item_id':a.item_id,'title':title,'kind':a.kind,
+            'old_base_price':float(a.old_base_price) if a.old_base_price is not None else None,
+            'new_base_price':float(a.new_base_price) if a.new_base_price is not None else None,
+            'old_available_units':a.old_available_units,
+            'new_available_units':a.new_available_units,
+            'old_title':a.old_title,'new_title':a.new_title,
+            'created_at':a.created_at.isoformat(),
+            'reviewed_at':a.reviewed_at.isoformat() if a.reviewed_at else None,
+        } for a,title in alerts]
+    }
+
+@app.post('/api/supplier/watch/snapshot')
+async def record_supplier_watch_snapshot(data:SupplierWatchSnapshotInput,
+    user=Depends(check_csrf),db:Session=Depends(get_db)):
+    """Comparación de una captura VERIFICADA. Nunca inserta en public.products.
+    'complete' solo se permite si se examinó todo el catálogo; evita falsos retiros.
+    No significa que exista una conexión automática de WhatsApp.
+    """
+    incoming={}
+    for row in data.items:
+        key=row.external_id.strip()
+        title=row.title.strip()
+        if not key or not title:raise HTTPException(422,'Identificador y título obligatorios')
+        if key in incoming:raise HTTPException(422,'Identificadores duplicados en la captura')
+        incoming[key]=(title,money(row.base_price) if row.base_price is not None else None,row.available_units)
+    existing={p.external_id:p for p in db.scalars(select(SupplierWatchItem)
+        .where(SupplierWatchItem.source_key==WATCH_SOURCE)).all()}
+    baseline=len(existing)==0
+    observed=datetime.now(timezone.utc)
+    counts={'nuevos':0,'retirados':0,'reposiciones':0,'precios':0,'cantidades':0,'titulos':0}
+    def mark(p,kind,oldprice=None,newprice=None,oldunits=None,newunits=None,oldtitle=None,newtitle=None):
+        db.add(SupplierWatchAlert(item_id=p.id,kind=kind,
+            old_base_price=oldprice,new_base_price=newprice,
+            old_available_units=oldunits,new_available_units=newunits,
+            old_title=oldtitle,new_title=newtitle))
+    for key,(title,price,units) in incoming.items():
+        p=existing.get(key)
+        if p is None:
+            p=SupplierWatchItem(source_key=WATCH_SOURCE,external_id=key,title=title,
+                base_price=price,available_units=units,listed=True,first_seen_at=observed,last_seen_at=observed)
+            db.add(p);db.flush()
+            if not baseline:
+                mark(p,'nuevo',newprice=price,newunits=units,newtitle=title)
+                counts['nuevos']+=1
+            continue
+        if not p.listed:
+            mark(p,'repuesto',newprice=price,newunits=units,newtitle=title)
+            counts['reposiciones']+=1
+        if p.base_price!=price:
+            mark(p,'precio',oldprice=p.base_price,newprice=price)
+            counts['precios']+=1
+        if p.available_units!=units:
+            mark(p,'cantidad',oldunits=p.available_units,newunits=units)
+            counts['cantidades']+=1
+        if p.title!=title:
+            mark(p,'titulo',oldtitle=p.title,newtitle=title)
+            counts['titulos']+=1
+        p.title=title;p.base_price=price;p.available_units=units
+        p.listed=True;p.last_seen_at=observed
+    if data.complete and not baseline:
+        for key,p in existing.items():
+            if key not in incoming and p.listed:
+                p.listed=False
+                mark(p,'retirado',oldprice=p.base_price,oldunits=p.available_units,oldtitle=p.title)
+                counts['retirados']+=1
+    audit(db,user,'supplier.watch.snapshot',str(counts)[:490])
+    db.commit()
+    await broadcast()
+    return {'ok':True,'baseline':baseline,'complete':data.complete,
+        'items_observed':len(incoming),'changes':counts}
+
+class SupplierWatchReviewInput(BaseModel):
+    reviewed: bool = True
+
+@app.post('/api/supplier/watch/alerts/{alert_id}/review')
+async def review_supplier_watch_alert(alert_id:int,data:SupplierWatchReviewInput,
+    user=Depends(check_csrf),db:Session=Depends(get_db)):
+    item=db.get(SupplierWatchAlert,alert_id)
+    if not item:raise HTTPException(404,'Novedad no encontrada')
+    supplier=db.get(SupplierWatchItem,item.item_id)
+    if not supplier or supplier.source_key!=WATCH_SOURCE:raise HTTPException(404,'Novedad no encontrada')
+    item.reviewed_at=datetime.now(timezone.utc) if data.reviewed else None
+    audit(db,user,'supplier.watch.review',f'{alert_id}: {data.reviewed}')
+    db.commit();await broadcast()
+    return {'id':alert_id,'reviewed':data.reviewed}
+
 
 class SupplierAlertReviewInput(BaseModel):
     reviewed: bool = True
