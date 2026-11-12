@@ -200,12 +200,13 @@ function card(p,isRecent=false){
  const photo=p.photos?.[0];
  const opts=tiers(p).filter(t=>t.id!=='unit');
  const first=opts[0];
- const wholesaleNoPrice=isWholesale&&p.wholesale_only&&!first;
- const stock=p.available?(p.available_units===null?'DISPONIBLE':p.available_units+' DISPONIBLES'):'AGOTADO';
+ const wholesaleOnlyNotice=isWholesale&&p.wholesale_only;
+ const wholesaleNoPrice=wholesaleOnlyNotice&&!first;
+ const stock=wholesaleOnlyNotice?'SOLO POR MAYOR · MÁS DE 100 PIEZAS':p.available?(p.available_units===null?'DISPONIBLE':p.available_units+' DISPONIBLES'):'AGOTADO';
  return '<article class="product-card">'+
    '<button type="button" class="product-photo" data-detail="'+p.id+'" aria-label="Ver '+esc(p.name)+'">'+
      (photo?'<img loading="lazy" src="'+esc(photo)+'" alt="'+esc(p.name)+'">':'<span class="photo-placeholder">Fotografía no disponible</span>')+
-     '<span class="stock-tag '+(p.available?'':'out')+'">'+esc(stock)+'</span>'+
+     '<span class="stock-tag '+(wholesaleOnlyNotice?'wholesale-only':p.available?'':'out')+'">'+esc(stock)+'</span>'+
      (isRecent&&p.available?'<span class="arrival-tag">NUEVO</span>':'')+
    '</button>'+
    '<div class="product-details">'+
@@ -213,15 +214,15 @@ function card(p,isRecent=false){
     '<h3 class="product-title">'+esc(p.name)+'</h3>'+
     '<p class="product-description">'+esc(catalogShortDescription(p.description||'Consulta las características y presentaciones disponibles.'))+'</p>'+
     '<div class="product-prices"><div class="unit-label">'+(wholesaleNoPrice?'PRECIO MAYORISTA POR CONFIRMAR':isWholesale?'PRECIO MAYORISTA':'PRECIO POR UNIDAD')+'</div>'+
-    '<div class="unit-price">'+(wholesaleNoPrice?'<small>Consultar reposición</small>':'<small>Bs</small> '+fmt(isWholesale&&first?first.pricePerUnit:p.price_unit))+'</div>'+
+    '<div class="unit-price">'+(wholesaleNoPrice?'<small>Consultar precio y disponibilidad</small>':'<small>Bs</small> '+fmt(isWholesale&&first?first.pricePerUnit:p.price_unit))+'</div>'+
     (opts.length?opts.map(t=>'<div class="price-tier '+(t.id==='case'?'case':'')+'"><span>'+
       esc(t.id==='three'?'Desde 3 (c/u)':t.id==='dozen'?'Docena (c/u)':'Cajón x'+t.units)+
       '</span><strong>'+money(t.id==='case'?t.total:t.pricePerUnit)+'</strong></div>').join(''):
-      '<span class="tier-placeholder">'+(wholesaleNoPrice?'Sin tarifa mayorista · producto agotado':'Consulta precios especiales')+'</span>')+
+      '<span class="tier-placeholder">'+(wholesaleNoPrice?'Pedido de más de 100 piezas · sujeto a confirmación':'Consulta precios especiales')+'</span>')+
     '</div>'+
     '<div class="product-actions"><button type="button" data-detail="'+p.id+'">DETALLES</button>'+
      '<button class="add-button" type="button" data-add="'+p.id+'" '+(p.available&&canAdd(p,isWholesale?first:getTier(p,'unit'),1)?'':'disabled')+'>'+
-      (p.available?'＋ AGREGAR':'AGOTADO')+'</button></div>'+
+      (p.available?'＋ AGREGAR':wholesaleOnlyNotice?'SOLO POR MAYOR':'AGOTADO')+'</button></div>'+
    '</div></article>';
 }
 function renderArrivals(){
@@ -274,18 +275,18 @@ function openModal(id){
   '<div class="modal-body"><div class="modal-meta">'+
    '<span>COD: '+esc(p.sku||'#'+p.id)+'</span>'+
    '<span>'+esc(p.category||'Otros')+'</span>'+
-   '<span>'+(p.available?'DISPONIBLE':'AGOTADO')+'</span></div>'+
+   '<span>'+(isWholesale&&p.wholesale_only?'SOLO POR MAYOR · MÁS DE 100 PIEZAS':p.available?'DISPONIBLE':'AGOTADO')+'</span></div>'+
    '<h2 id="dialogTitle">'+esc(p.name)+'</h2><p>'+catalogFullDescription(p.description||'Consulta disponibilidad y modelos con Mega Compra.')+'</p>'+
    '<div class="modal-tiers">'+(allowedTiers(p).length?allowedTiers(p).map(t=>
     '<label><input type="radio" name="modalTier" value="'+t.id+'" '+(t.id===state.open.tier?'checked':'')+'>'+
     '<span>'+esc(t.label)+'</span><strong>'+money(t.total)+'</strong></label>').join(''):
-    '<p class="tier-placeholder">Producto agotado. Sin tarifa mayorista publicada. Consulta una posible reposición.</p>')+'</div>'+
+    '<p class="tier-placeholder">Venta solo por mayor en pedidos de más de 100 piezas. Precio y disponibilidad sujetos a confirmación.</p>')+'</div>'+
    (p.available?'<div class="modal-qty-row"><div><strong>Cantidad de paquetes</strong>'+
     '<small id="modalUnits">Equivale a 1 unidad</small></div>'+
     '<div class="qty-stepper"><button type="button" data-modal-step="-1" aria-label="Quitar paquete">−</button>'+
      '<span id="modalPacks">1</span><button type="button" data-modal-step="1" aria-label="Añadir paquete">+</button></div></div>'+
     '<button type="button" class="modal-add" id="modalAdd">＋ AGREGAR A MI PEDIDO</button>':
-    '<button type="button" class="modal-add" disabled>AGOTADO TEMPORALMENTE</button>')+
+    '<button type="button" class="modal-add" disabled>'+(isWholesale&&p.wholesale_only?'VENTA MAYORISTA · CONSULTAR':'AGOTADO TEMPORALMENTE')+'</button>')+
    '</div></div>';
  el.modal.classList.remove('hidden');el.overlay.classList.remove('hidden');
  document.body.style.overflow='hidden';$('#dialogClose').focus();updateModal();
@@ -517,9 +518,9 @@ function initializeMode(){
  document.querySelector('meta[name="description"]')?.setAttribute('content','Mega Compra Bolivia: catálogo exclusivo para compras desde 3 unidades, por docena y por cajón.');
  document.querySelector('#heroKickerText').textContent='MEGA COMPRA MAYORISTAS';
  document.querySelector('#heroHeading').innerHTML='Compra más,<br><em>paga menos.</em>';
- document.querySelector('#heroDescription').textContent='Precios especiales por volumen. Los productos agotados se muestran solo como referencia y no se pueden pedir.';
+ document.querySelector('#heroDescription').textContent='Precios especiales por volumen. Los artículos exclusivos de más de 100 piezas requieren confirmar precio y disponibilidad.';
  document.querySelector('#catalogTitle').textContent='Productos por mayor';
- document.querySelector('#catalogDescription').textContent='Precios por volumen y productos agotados para consulta de reposición. Los agotados no se pueden agregar al pedido.';
+ document.querySelector('#catalogDescription').textContent='Precios por volumen y artículos solo por mayor (más de 100 piezas), sujetos a confirmación de disponibilidad.';
  document.querySelectorAll('.catalog-tab').forEach(x=>{if(x.dataset.tab==='available'||x.dataset.tab==='recent')return;if(x.dataset.tab==='all')x.textContent='Todos los mayoristas';});
  const side=document.querySelector('.sidebar-note');if(side)side.innerHTML='<strong>¿Quieres comprar una sola unidad?</strong><p>Visita nuestro catálogo minorista.</p><a href="/catalogo">Ver catálogo por menor →</a>';
 }
